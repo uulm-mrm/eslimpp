@@ -1,0 +1,39 @@
+diff --git a/include/powerset_btree.hpp b/include/powerset_btree.hpp
+index eccd985..e624d05 100644
+--- a/include/powerset_btree.hpp
++++ b/include/powerset_btree.hpp
+@@ -159,7 +159,7 @@ namespace efficient_DST{
+ 	 */
+ 	template <size_t N, class T = float>
+ 	class powerset_btree {
+-	protected:
++	public:
+ 		typedef typename sample_space<N>::subset subset;
+ 		std::vector<node<N, T> > nodes;
+ 		std::vector<size_t> free_slots;
+diff --git a/include/powerset_function.hpp b/include/powerset_function.hpp
+index 06b8ae6..3e42677 100644
+--- a/include/powerset_function.hpp
++++ b/include/powerset_function.hpp
+@@ -30,7 +30,7 @@ namespace efficient_DST{
+ 
+ 	template <size_t N, typename T = float>
+ 	class powerset_function {
+-	protected:
++	public:
+ 		typedef typename sample_space<N>::subset subset;
+ 		sample_space<N> outcomes;
+ 		/*
+diff --git a/include/powerset_vector.hpp b/include/powerset_vector.hpp
+index 4c734d4..805c427 100644
+--- a/include/powerset_vector.hpp
++++ b/include/powerset_vector.hpp
+@@ -30,7 +30,7 @@ namespace efficient_DST{
+ 
+ 	template <size_t N, typename T = float>
+ 	class powerset_vector {
+-	protected:
++	public:
+ 		sample_space<N> outcomes;
+ 		std::vector<T> definition;
+ 		const T default_value;

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>subjective_logic_lib_example</name>
+  <version>0.0.0</version>
+  <description>subjective_logic_lib_example</description>
+  <author>Thomas Wodtko</author>
+  <maintainer email="thomas.wodtko@uni-ulm.de">Thomas Wodtko</maintainer>
+  <license>Proprietary, (c) 2018 Ulm University, Institute of Measurement, Control and Microtechnology</license>
+  
+  <build_depend>aduulm_cmake_tools</build_depend>
+  <build_depend>subjective_logic_lib</build_depend>
+
+<!--  <depend>aduulm_logger_lib</depend>-->
+<!--  <depend>aduulm_measurement_types_lib</depend>-->
+<!--  <depend>aduulm_detection_types_lib</depend>-->
+
+<!--  <depend>PCL</depend>-->
+
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,20 @@
+set(@PROJECT_NAME@_VERSION "@PACKAGE_LIBRARY_VERSION@")
+@PACKAGE_INIT@
+if (@aduulm_cmake_tools_FOUND@)
+    set_and_check(@PROJECT_NAME@_INCLUDE_DIRS "@PACKAGE_INCLUDE_INSTALL_DIR@")
+    #Comment the following line if you have a header-only library (INTERFACE library)
+    set_and_check(@PROJECT_NAME@_LIB_DIR "@PACKAGE_LIB_INSTALL_DIR@")
+    #Uncomment the following line if your library installs binaries
+    #set_and_check(@PROJECT_NAME@_BIN_DIR "@PACKAGE_BIN_INSTALL_DIR@")
+endif()
+
+set(@PROJECT_NAME@_LIBRARIES @PROJECT_NAME@::@PROJECT_NAME@ )
+
+
+if (@aduulm_cmake_tools_FOUND@)
+    check_required_components(@PROJECT_NAME@)
+endif()
+
+#Include exported targets
+get_filename_component(SELF_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+include(${SELF_DIR}/@PROJECT_NAME@Targets.cmake)
