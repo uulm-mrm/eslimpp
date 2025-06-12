@@ -44,20 +44,20 @@ for factor, distr in mixture:
     mixture_var += factor * distr.variances() + factor * distr.mean()*distr.mean()
 mixture_var -= mixture_mean * mixture_mean
 
-print(f'mean: {mixture_mean} | {colored('mixture', 'yellow')}')
-print(f'mean: {updated_dist.mean()} | {colored('moment matching update', 'green')}')
-print(f'mean: {dist_verify.mean()} | {colored('cbf','red')}')
+print(f"mean: {mixture_mean} | {colored('mixture', 'yellow')}")
+print(f"mean: {updated_dist.mean()} | {colored('moment matching update', 'green')}")
+print(f"mean: {dist_verify.mean()} | {colored('cbf','red')}")
 print()
-print(f'var: {mixture_var} | {colored('mixture', 'yellow')}')
-print(f'var: {updated_dist.variances()} | {colored('moment matching update','green')}')
-print(f'var: {dist_verify.variances()} | {colored('cbf','red')}')
+print(f"var: {mixture_var} | {colored('mixture', 'yellow')}")
+print(f"var: {updated_dist.variances()} | {colored('moment matching update','green')}")
+print(f"var: {dist_verify.variances()} | {colored('cbf','red')}")
 print()
-print(f'alphas {dist.alphas()} | {colored('before update','blue')}')
-print(f'{colored('mixture', 'yellow')} components:')
+print(f"alphas {dist.alphas()} | {colored('before update','blue')}")
+print(f"{colored('mixture', 'yellow')} components:")
 for factor, distr in mixture:
-    print(f'\tfactor: {factor}, alphas: {distr.alphas()}')
-print(f'alphas: {updated_dist.alphas()} | {colored('moment matching update','green')}')
-print(f'alphas: {dist_verify.alphas()} | {colored('cbf','red')}')
+    print(f"\tfactor: {factor}, alphas: {distr.alphas()}")
+print(f"alphas: {updated_dist.alphas()} | {colored('moment matching update','green')}")
+print(f"alphas: {dist_verify.alphas()} | {colored('cbf','red')}")
 
 
 # sample distrs for plotting
