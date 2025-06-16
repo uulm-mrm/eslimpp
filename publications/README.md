@@ -25,3 +25,8 @@ If the repository is already available and a venv with eslimpp installed was cre
   python eSLIM++/classification_task.py
 ```
 
+
+# Citation
+For each of the publications in this directory, citation information should be available in the respective directories.
+If you are using the reference implementations provided by any such publication for your research, please consider adding the respective citation to your work.
+If you implement your work using eSLIM++ please cite the eSLIM++ publication as described [here](../README.md) in any case.

@@ -1,6 +1,10 @@
 # For the Reviewers
+## Review of the paper: "eSLIM++ - an Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces"
 To run the evaluation scripts reproducing the paper presentations, please refer to the following install/use instructions for [Python](publications/README.md) and [C++](publications/eSLIM++/README.md)\
 For general use, please follow the instructions below.
+## Review of the paper: "Balancing Conflict and Harmony - Persistent Trust Revision in Time-Dependent Subjective Networks"
+A description of the experiment scripts is provided [here](publications/2025_mfi_wodtko/README.md), which uses the eslimpp library.
+General information for Python evaluations apply [see here](publications/README.md).
 
 ![](misc/eSLIM_logo.png)
 
@@ -104,8 +108,9 @@ Schumann, O., Wodtko, T., Buchholz, M., & Dietmayer, K. (2024). Self-Assessment 
 <a id="103">[3]</a>
 Scheible, A., Griebel, T., Herrmann, M., Hermann, C., & Buchholz, M. (2023). Track Classification for Random Finite Set Based Multi-Sensor Multi-Object Tracking. IEEE Symposium Sensor Data Fusion and International Conference on Multisensor Fusion and Integration (SDF-MFI).\
 <a id="104">[4]</a>
-Scheible, A., Griebel, T., & Buchholz, M. (2024, September 24). Self-Monitored Detection Probability Estimation for the Labeled Multi-Bernoulli Filter. IEEE 27th International Conference on Intelligent Transportation Systems (ITSC).
-
+Scheible, A., Griebel, T., & Buchholz, M. (2024, September 24). Self-Monitored Detection Probability Estimation for the Labeled Multi-Bernoulli Filter. IEEE 27th International Conference on Intelligent Transportation Systems (ITSC).\
+<a id="104">[5]</a>
+Griebel, T., Muller, J., Buchholz, M., & Dietmayer, K. (2020, July). Kalman Filter Meets Subjective Logic: A Self-Assessing Kalman Filter Using Subjective Logic. 23rd International Conference on Information Fusion (FUSION).
 
 
 # Licence - Apache 2.0
