@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(subjective_logic_lib VERSION 0.1 LANGUAGES CXX)
+enable_testing()
 
 # Get aduulm cmake macros for coloring, package_version extraction and find_aduulm_package()
 # only used within the aduulm context, e.g., setting up git hooks etc
