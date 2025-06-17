@@ -6,6 +6,7 @@ For general use, please follow the instructions below.
 A description of the experiment scripts is provided [here](publications/2025_mfi_wodtko/README.md), which uses the eslimpp library.
 General information for Python evaluations apply [see here](publications/README.md).
 
+[![codecov](https://codecov.io/gh/uulm-mrm/eslimpp/graph/badge.svg?token=WQR9SF8QOU)](https://codecov.io/gh/uulm-mrm/eslimpp)
 ![](misc/eSLIM_logo.png)
 
 # eSLIM++ - efficient Subjective Logic IMplementation in C++
