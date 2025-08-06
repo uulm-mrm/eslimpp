@@ -2,7 +2,7 @@
 
 The scripts in this directory will create some of the images used in the paper with the title above.
 More importantly, it also reproduces the evaluation results presented in the paper.
-Evaluations can be run as descriped in [here](../README.md), for generating the images, some additional packages are required (`cm-super`,`texlive`, `texlive-latex-axtra`).
+Evaluations can be run as described in [here](../README.md), for generating the images, some additional packages are required (`cm-super`,`texlive`, `texlive-latex-extra`).
 
 ## Experiment description
 To obtain the results of the first experiment run the script `symmetric_tr.py` >
