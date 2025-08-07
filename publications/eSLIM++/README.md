@@ -37,7 +37,7 @@ Additionally, if the DST evaluation should be added to the script run
 ```bash
   cmake .. -DRUN_DST
 ```
-It shall be mentioned that, at the of writing, the use of the dst library was not directly streight forward.
+It shall be mentioned that, at the of writing, the use of the dst library was not directly straight forward.
 How certain (fusion)operators are meant to be applied was not fully apparent to the author.
 Respectively, the DST evaluation uses one specific operator for fusion, and the categorization is deactivated, since the author was not aware of how to access the belief_mass of a certain set.
 That being said, the DST Evaluation is available, but take a little longer; for more runs (>10) the eval execution takes some time.
