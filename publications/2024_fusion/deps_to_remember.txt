@@ -1,0 +1,12 @@
+install bezier and matplotlib (pip):
+sudo python3 -m pip install bezier matplotlib
+
+in case of issues with matplotlib reinstall is after:
+sudo apt remove python3-matplotlib
+sudo python3 -m pip uninstall matplotlib
+
+install texlive:
+sudo apt install texlive-latex-extra
+
+install text stuff for matplotlib:
+sudo apt install cm-super dvipng

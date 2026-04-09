@@ -8,11 +8,13 @@ namespace nb = nanobind;
 
 NB_MODULE(_subjective_logic_lib_python_api, m)
 {
+  loadLongShortTermMemoryBindings(m);
   loadCudaCompatibleArrayBindings(m);
   loadDirichletDistributionBindings(m);
   loadOpinionBindings(m);
   loadOpinionNoBaseBindings(m);
   loadTrustedOpinionBindings(m);
+  loadAllFusionTypes(m);
   loadMultiSourceFusionOperatorBindings(m);
   loadMultiSourceConflictOperatorBindings(m);
   loadMultiSourceTrustRevisionOperatorBindings(m);

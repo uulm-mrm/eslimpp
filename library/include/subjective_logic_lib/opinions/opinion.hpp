@@ -21,6 +21,9 @@ using Trust = Opinion<2, FloatT>;
 template <std::size_t N, typename FloatT>
 class DirichletDistribution;
 
+template <std::size_t N, typename FloatT>
+using QuantizedOpinion = Opinion<N, ZeroOneFloat<FloatT>>;
+
 /**
  * @brief this class is meant to be used in large arrays and,
  * thus, size and fast access are sometime more important than an easy and intuitive use.
@@ -40,6 +43,11 @@ template <std::size_t N = 2, typename FloatT = float>
 class Opinion
 {
 public:
+  using QuantizedT = QuantizedOpinion<N, FloatT>;
+  using DeQuantizedT = Opinion<N, dequantized_type_t<FloatT>>;
+  static constexpr bool is_quantized = is_quantized_type<FloatT>;
+  static constexpr bool is_not_quantized = (not is_quantized);
+
   using NoBaseType = OpinionNoBase<N, FloatT>;
   using FLOAT_t = typename NoBaseType::FLOAT_t;
   static constexpr std::size_t SIZE = NoBaseType::SIZE;
@@ -68,6 +76,17 @@ public:
    */
   CUDA_AVAIL
   constexpr Opinion(NoBaseType opinion_no_base, BeliefType prior);
+
+  /**
+   * @brief creates an Opinion from either a quantized or normal version of it
+   *        thus, it may either be a usual copy ctor, or the conversion between quantized and dequantized
+   * @param other_opinion
+   */
+  template <typename T>
+  CUDA_AVAIL explicit constexpr Opinion(T other_opinion)
+    requires(
+        // either of both will always be the same as the current OpinionNoBase
+        std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>);
 
   /**
    * @brief allows to use the ctor with the correct number of arguments instead of requiring an initializer list
@@ -101,6 +120,13 @@ public:
     requires is_binomial<N>;
 
   /**
+   * @brief convenience conversion between Opinions and DirichletDistributions
+   */
+  template <typename DirFloatT>
+  CUDA_AVAIL constexpr explicit Opinion(DirichletDistribution<N, DirFloatT> dirichlet)
+    requires std::is_convertible_v<DirFloatT, FloatT>;
+
+  /**
    * @brief default copy ctor
    * @param other
    */
@@ -130,7 +156,21 @@ public:
   /**
    * @brief checks for the validity of OpinionNoBase and sum of prior values to be 1.
    */
-  constexpr bool is_valid() const;
+  [[nodiscard]] constexpr bool is_valid() const;
+
+  /**
+   * @brief returns a quantized opinion that uses a 1-byte float representation
+   */
+  CUDA_AVAIL
+  constexpr QuantizedT get_quantized() const
+    requires(is_not_quantized);
+
+  /**
+   * @brief returns a dequantized opinion
+   */
+  CUDA_AVAIL
+  constexpr DeQuantizedT get_dequantized() const
+    requires(is_quantized);
 
   /**
    * @brief interface to the base class which allows public access of protected inherited members
@@ -683,7 +723,7 @@ public:
    * @brief converts opinion to a Dirichlet distribution while preserving prior and evidence
    */
   CUDA_AVAIL
-  constexpr operator DirichletDistribution<N, FloatT>() const;
+  constexpr explicit operator DirichletDistribution<N, FloatT>() const;
 
   /**
    * @brief generates a readable string containing the belief masses and the uncertainty
@@ -723,6 +763,16 @@ constexpr Opinion<N, FloatT>::Opinion(NoBaseType opinion_no_base, BeliefType pri
 }
 
 template <std::size_t N, typename FloatT>
+template <typename T>
+constexpr Opinion<N, FloatT>::Opinion(T other_opinion)
+  requires(
+      // either of both will always be the same as the current OpinionNoBase
+      std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>)
+  : Opinion(BeliefType{ other_opinion.belief_masses() }, BeliefType{ other_opinion.prior_belief_masses() })
+{
+}
+
+template <std::size_t N, typename FloatT>
 template <typename... VALUES>
 constexpr Opinion<N, FloatT>::Opinion(VALUES... values)
   requires(is_arithmetic_list<VALUES...> and sizeof...(VALUES) == N)
@@ -753,6 +803,20 @@ constexpr bool Opinion<N, FloatT>::is_valid() const
   auto prior_sum = prior_.sum();
 
   return base_valid and valid_entries and prior_sum > 1.0 - EPS_v<FloatT> and prior_sum < 1.0 + EPS_v<FloatT>;
+}
+
+template <std::size_t N, typename FloatT>
+constexpr QuantizedOpinion<N, FloatT> Opinion<N, FloatT>::get_quantized() const
+  requires(is_not_quantized)
+{
+  return QuantizedT(opinion_no_base_.get_quantized(), static_cast<QuantizedT::BeliefType>(prior_));
+}
+
+template <std::size_t N, typename FloatT>
+constexpr Opinion<N, FloatT>::DeQuantizedT Opinion<N, FloatT>::get_dequantized() const
+  requires(is_quantized)
+{
+  return DeQuantizedT(opinion_no_base_.get_dequantized(), static_cast<DeQuantizedT::BeliefType>(prior_));
 }
 
 template <std::size_t N, typename FloatT>
@@ -842,7 +906,8 @@ constexpr Opinion<N, FloatT> Opinion<N, FloatT>::NeutralBeliefOpinion()
 template <std::size_t N, typename FloatT>
 constexpr Opinion<N, FloatT> Opinion<N, FloatT>::VacuousBeliefOpinion()
 {
-  return Opinion{ NoBaseType::VacuousBeliefDistr(), NoBaseType::VacuousBeliefDistr() };
+  // prior must sum up to 1.
+  return Opinion{ NoBaseType::VacuousBeliefDistr(), NoBaseType::NeutralBeliefDistr() };
 }
 
 template <std::size_t N, typename FloatT>
@@ -1064,13 +1129,15 @@ constexpr Opinion<N, FloatT> Opinion<N, FloatT>::comultiply(Opinion<N, FloatT> o
 template <std::size_t N, typename FloatT>
 constexpr Opinion<N, FloatT>& Opinion<N, FloatT>::cum_fuse_(Opinion other)
 {
+  using std::abs;
+
   FloatT uncert_this = uncertainty();
   FloatT uncert_other = other.uncertainty();
 
   opinion_no_base_.cum_fuse_(other.opinion_no_base_);
 
   FloatT denom = uncert_this + uncert_other - 2. * uncert_this * uncert_other;
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
     constexpr_for<0, N, 1>([this, other](std::size_t idx) { prior_[idx] = (prior_[idx] + other.prior_[idx]) / 2.; });
     return *this;
@@ -1114,13 +1181,14 @@ constexpr FloatT Opinion<N, FloatT>::conflict(Opinion other) const
 template <std::size_t N, typename FloatT>
 constexpr Opinion<N, FloatT>& Opinion<N, FloatT>::bc_fuse_(Opinion other)
 {
+  using std::abs;
   FloatT uncert_this = uncertainty();
   FloatT uncert_other = other.uncertainty();
 
   opinion_no_base_.bc_fuse_(other.opinion_no_base_);
 
   FloatT denom = 2 - uncert_this - uncert_other;
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
     constexpr_for<0, N, 1>([&](std::size_t idx) { prior_[idx] = (prior_[idx] + other.prior_[idx]) / 2.; });
     return *this;
@@ -1155,13 +1223,15 @@ constexpr Opinion<N, FloatT> Opinion<N, FloatT>::average_fuse(Opinion other) con
 template <std::size_t N, typename FloatT>
 constexpr Opinion<N, FloatT>& Opinion<N, FloatT>::wb_fuse_(Opinion other)
 {
+  using std::abs;
+
   FloatT uncert_this = uncertainty();
   FloatT uncert_other = other.uncertainty();
 
   opinion_no_base_.wb_fuse_(other.opinion_no_base_);
 
   FloatT denom = 2 - uncert_this - uncert_other;
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
     constexpr_for<0, N, 1>([&](std::size_t idx) { prior_[idx] = (prior_[idx] + other.prior_[idx]) / 2.; });
     return *this;
@@ -1323,12 +1393,7 @@ Opinion<newN, FloatT> constexpr Opinion<N, FloatT>::getReducedOpinion(
 template <std::size_t N, typename FloatT>
 constexpr bool Opinion<N, FloatT>::operator==(const Opinion& other) const
 {
-  FloatT diff{ 0. };
-  for (std::size_t idx{ 0 }; idx < N; ++idx)
-  {
-    diff += std::abs(prior_[idx] - other.prior_[idx]);
-  }
-  return diff < EPS_v<FloatT> and opinion_no_base_ == other.opinion_no_base_;
+  return prior_ == other.prior_ and opinion_no_base_ == other.opinion_no_base_;
 }
 
 template <std::size_t N, typename FloatT>
@@ -1341,27 +1406,27 @@ inline std::ostream& operator<<(std::ostream& out, Opinion<N, FloatT> const& opi
 template <std::size_t N, typename FloatT>
 std::string Opinion<N, FloatT>::to_string() const
 {
+  using std::to_string;
   if constexpr (is_binomial<N>)
   {
-    std::string opinion = std::string{ "[bel: " } + std::to_string(belief()) +
-                          "; disbel: " + std::to_string(disbelief()) +
-                          "; uncertainty: " + std::to_string(uncertainty()) + "]";
-    std::string prior = std::string{ "[bel: " } + std::to_string(prior_belief()) +
-                        "; disbel: " + std::to_string(prior_disbelief()) + "]";
+    std::string opinion = std::string{ "[bel: " } + to_string(belief()) + "; disbel: " + to_string(disbelief()) +
+                          "; uncertainty: " + to_string(uncertainty()) + "]";
+    std::string prior =
+        std::string{ "[bel: " } + to_string(prior_belief()) + "; disbel: " + to_string(prior_disbelief()) + "]";
     return std::string{ "opinion: " } + opinion + " | prior: " + prior;
   }
 
   std::string opinion{ "[bel masses: " };
   for (const auto& mass : this->belief_masses())
   {
-    opinion += std::to_string(mass) + ", ";
+    opinion += to_string(mass) + ", ";
   }
-  opinion += "uncertainty: " + std::to_string(uncertainty()) + "]";
+  opinion += "uncertainty: " + to_string(uncertainty()) + "]";
 
   std::string prior{ "[bel masses: " };
   for (const auto& mass : this->prior_)
   {
-    prior += std::to_string(mass) + ", ";
+    prior += to_string(mass) + ", ";
   }
   prior += "]";
 
@@ -1375,3 +1440,5 @@ Opinion<N, FloatT>::operator std::string() const
 }
 
 }  // namespace subjective_logic
+
+#include "subjective_logic_lib/types/convert.hpp"

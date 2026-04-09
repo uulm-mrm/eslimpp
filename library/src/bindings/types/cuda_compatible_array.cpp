@@ -81,13 +81,17 @@ struct ArrayLoader
                   return a[idx];
                 },
                 nb::rv_policy::reference)
-            .def("__setitem__", [](Array& a, int idx, FloatT value) {
-              if (idx < 0)
-              {
-                idx += a.size();
-              }
-              a[idx] = value;
-            });
+            .def("__setitem__",
+                 [](Array& a, int idx, FloatT value) {
+                   if (idx < 0)
+                   {
+                     idx += a.size();
+                   }
+                   a[idx] = value;
+                 })
+            .def("__getstate__", [](const Array& a) { return tuplefy_array(a.entries()); })
+            .def("__setstate__",
+                 [](Array& a, TupleWithTypeAnLength<FloatT, N> tuple_data) { a = Array(arrayfy_tuple(tuple_data)); });
     defineArrayCtorArgs(bound_class);
   }
 };

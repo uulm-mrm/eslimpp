@@ -3,6 +3,7 @@
 #include <string>
 
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 #include "subjective_logic_lib/multi_source/trusted_fusion_operators.hpp"
 
 namespace nb = nanobind;
@@ -17,30 +18,32 @@ struct MultiSourceTrustedFusionLoader
   {
     using TrustedOpinionT = sl::TrustedOpinion<OpinionT>;
     nb_mod.def_static("fuse_opinions",
-                      nb::overload_cast<slm::Fusion::FusionType, const std::vector<TrustedOpinionT>&>(
+                      nb::overload_cast<sl::FusionType, const std::vector<TrustedOpinionT>&>(
                           &sl::multisource::TrustedFusion::template fuse_opinions<TrustedOpinionT>));
 
     nb_mod.def_static("fuse_opinions",
-                      nb::overload_cast<slm::Fusion::FusionType,
-                                        slm::TrustRevision::TrustRevisionType,
-                                        slm::Conflict::ConflictType,
+                      nb::overload_cast<sl::FusionType,
+                                        sl::RelationType,
+                                        sl::TrustRevisionType,
+                                        sl::ConflictType,
                                         const std::vector<TrustedOpinionT>&>(
                           &sl::multisource::TrustedFusion::template fuse_opinions<TrustedOpinionT>));
 
     // by explicitly defining the function call, the result is made available in python, since nanobind does not seem to
     // support input/output parameter
     nb_mod.def_static("fuse_opinions_",
-                      [](slm::Fusion::FusionType fusion_type,
-                         slm::TrustRevision::TrustRevisionType revision_type,
-                         slm::Conflict::ConflictType conflict_type,
+                      [](sl::FusionType fusion_type,
+                         sl::RelationType relation_type,
+                         sl::TrustRevisionType revision_type,
+                         sl::ConflictType conflict_type,
                          std::vector<TrustedOpinionT>& t_vec) {
                         auto fusion = slm::TrustedFusion::fuse_opinions_<TrustedOpinionT>(
-                            fusion_type, revision_type, conflict_type, t_vec);
+                            fusion_type, relation_type, revision_type, conflict_type, t_vec);
                         return std::make_tuple(fusion, t_vec);
                       });
 
     nb_mod.def_static("fuse_opinions",
-                      nb::overload_cast<slm::Fusion::FusionType,
+                      nb::overload_cast<sl::FusionType,
                                         std::vector<slm::TrustedFusion::WeightedTypes>,
                                         const std::vector<TrustedOpinionT>&>(
                           &sl::multisource::TrustedFusion::template fuse_opinions<TrustedOpinionT>));
@@ -48,7 +51,7 @@ struct MultiSourceTrustedFusionLoader
     // by explicitly defining the function call, the result is made available in python, since nanobind does not seem to
     // support input/output parameter
     nb_mod.def_static("fuse_opinions_",
-                      [](slm::Fusion::FusionType fusion_type,
+                      [](sl::FusionType fusion_type,
                          std::vector<slm::TrustedFusion::WeightedTypes> types_vec,
                          std::vector<TrustedOpinionT>& t_vec) {
                         auto fusion =
@@ -69,6 +72,15 @@ struct MultiSourceTrustedFusionLoader
 
 void loadMultiSourceTrustedFusionOperatorBindings(::nanobind::module_& bound_module)
 {
+  using WType = sl::multisource::TrustedFusion::WeightedTypes;
+  nb::class_<WType>(bound_module, "WeightedTypes")
+      .def(nb::init<>())
+      .def(nb::init<sl::RelationType, sl::TrustRevisionType, sl::ConflictType, double>())
+      .def_rw("relation_type", &WType::relation_type)
+      .def_rw("trust_revision_type", &WType::trust_revision_type)
+      .def_rw("conflict_type", &WType::conflict_type)
+      .def_rw("weight", &WType::weight);
+
   std::string module_name{ "TrustedFusion" };
   auto bound_class = nb::class_<sl::multisource::TrustedFusion>(bound_module, module_name.c_str());
 

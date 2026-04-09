@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "eSLIM++"
+message: "If you use this software, please cite the following paper."
+type: software
+
+authors:
+  - family-names: "Wodtko"
+    given-names: "Thomas"
+  - family-names: "Griebel"
+    given-names: "Thomas"
+  - family-names: "Buchholz"
+    given-names: "Michael"
+
+preferred-citation:
+  type: conference
+  title: "eSLIM++ - An Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces"
+  booktitle: "2025 IEEE International Conference on Multisensor Fusion and Integration for Intelligent Systems (MFI)"
+  year: 2025
+  doi: "10.1109/MFI67357.2025.11259193"
+  pages: 1-7
+  authors:
+    - family-names: "Wodtko"
+      given-names: "Thomas"
+    - family-names: "Griebel"
+      given-names: "Thomas"
+    - family-names: "Buchholz"
+      given-names: "Michael"
+
+# Optional metadata (recommended)
+url: "https://github.com/uulm-mrm/eslimpp"
+license: "Apache-2.0"

@@ -2,6 +2,12 @@
 ## Python Bindings ##
 #####################
 
+# skip python bindings in coverage build, as it confused the gcovr by producing tons of template instantiations
+if (${COVERAGE})
+    return()
+endif ()
+
+
 find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -22,8 +28,11 @@ if(nanobind_FOUND)
             # single opinion type bindings
             bindings.cpp
 
+            container/long_short_term_memory.cpp
+
             types/cuda_compatible_array.cpp
             types/dirichlet_distribution.cpp
+            types/fusion_types.cpp
 
             opinions/opinion_no_base.cpp
             opinions/opinion.cpp

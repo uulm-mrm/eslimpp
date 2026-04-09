@@ -34,9 +34,10 @@ struct TrustedOpinionLoader
     auto bound_class =
         nb::class_<TOp>(bound_module, module_name.c_str())
             .def_ro_static("dimension", &TOp::SIZE)
-            .def_static("extractOpinions", &TOp::extractOpinions)
-            .def_static("extractTrusts", &TOp::extractTrusts)
-            .def_static("extractDiscountedOpinions", &TOp::extractDiscountedOpinions)
+            .def_static("extractOpinions", [](const std::vector<TOp>& vec) { return TOp::extractOpinions(vec); })
+            .def_static("extractTrusts", [](const std::vector<TOp>& vec) { return TOp::extractTrusts(vec); })
+            .def_static("extractDiscountedOpinions",
+                        [](const std::vector<TOp>& vec) { return TOp::extractDiscountedOpinions(vec); })
             .def(nb::init())
             .def(nb::init<TrustT, OpinionT>(), nb::arg("belief_masses"), nb::arg("prior_belief_masses"))
             .def("__deepcopy__", [](const TOp& a, nb::dict memo) -> TOp { return a; })
@@ -60,7 +61,13 @@ struct TrustedOpinionLoader
             .def("revise_trust_", nb::overload_cast<TOp&>(&TOp::revise_trust_), nb::rv_policy::reference)
             .def("revise_trust", nb::overload_cast<TOp>(&TOp::revise_trust, nb::const_))
             .def("__repr__", &TOp::to_string)
-            .def("copy", [](const TOp& top) -> TOp { return top; });
+            .def("copy", [](const TOp& top) -> TOp { return top; })
+            .def(nb::self == nb::self);
+
+    bound_class.def("__reduce__", [=](const TOp& a) {
+      // return its own class to allow calling the ctor later on
+      return std::make_tuple(bound_class, std::make_tuple(a.trust(), a.opinion()));
+    });
   }
 
   static void load(::nanobind::module_& bound_module)

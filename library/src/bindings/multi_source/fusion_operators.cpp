@@ -17,9 +17,8 @@ struct MultiSourceFusionLoader
   static void loadArbitraryNumberOfArguments(::nanobind::class_<slm::Fusion>& bound_class)
     requires(sizeof...(ARGS) > 0)
   {
-    bound_class.def_static(
-        "fuse_opinions",
-        nb::overload_cast<slm::Fusion::FusionType, ARGS...>(&slm::Fusion::template fuse_opinions<ARGS...>));
+    bound_class.def_static("fuse_opinions",
+                           nb::overload_cast<sl::FusionType, ARGS...>(&slm::Fusion::template fuse_opinions<ARGS...>));
 
     // add another ARG to the list
     if constexpr (sizeof...(ARGS) < kMaxArgNumber_)
@@ -34,7 +33,7 @@ struct MultiSourceFusionLoader
     using OpinionNoBase = sl::OpinionNoBase<N, FloatT>;
 
     nb_mod.def_static("fuse_opinions",
-                      nb::overload_cast<slm::Fusion::FusionType, std::vector<Opinion>>(
+                      nb::overload_cast<sl::FusionType, std::vector<Opinion>>(
                           &sl::multisource::Fusion::template fuse_opinions<Opinion>));
 
     loadArbitraryNumberOfArguments<Opinion>(nb_mod);
@@ -42,21 +41,10 @@ struct MultiSourceFusionLoader
   }
 };
 
-void loadFusionTypes(::nanobind::class_<sl::multisource::Fusion>& nb_mod)
-{
-  nb::enum_<slm::Fusion::FusionType>(nb_mod, "FusionType")
-      .value("CUMULATIVE", slm::Fusion::FusionType::CUMULATIVE)
-      .value("BELIEF_CONSTRAINT", slm::Fusion::FusionType::BELIEF_CONSTRAINT)
-      .value("AVERAGE", slm::Fusion::FusionType::AVERAGE)
-      .value("WEIGHTED", slm::Fusion::FusionType::WEIGHTED);
-}
-
 void loadMultiSourceFusionOperatorBindings(::nanobind::module_& bound_module)
 {
   std::string module_name{ "Fusion" };
   auto bound_class = nb::class_<sl::multisource::Fusion>(bound_module, module_name.c_str());
-
-  loadFusionTypes(bound_class);
 
   loadBindings<MultiSourceFusionLoader>(bound_class);
 }

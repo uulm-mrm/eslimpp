@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <type_traits>
 
 #ifdef __CUDA_ARCH__
@@ -21,12 +20,13 @@ concept is_binomial = N == 2;
 
 /**
  * @brief EPS allows to specifiy the epsilon used during comparisons within eSLIM++
- *        If no type specific value is specified, the std::nummeric_limits<T>::epsilon is used
+ *        If no type-specific value is specified, the std::nummeric_limits<T>::epsilon is used
  */
 template <typename FloatT>
 struct EPS
 {
-  static constexpr FloatT epsilon = std::numeric_limits<FloatT>::epsilon();
+  // auto required to allow automatic deduction of a float type with, e.g. LimitedFloat
+  static constexpr auto value = std::numeric_limits<FloatT>::epsilon();
 };
 
 /**
@@ -50,7 +50,8 @@ struct EPS<float>
  * @brief shortcut definition to access the value of a specific EPS struct
  */
 template <typename FloatT>
-static constexpr FloatT EPS_v{ EPS<FloatT>::value };
+// auto required to allow automatic deduction of a float type with, e.g. LimitedFloat
+static constexpr auto EPS_v{ EPS<FloatT>::value };
 /** @} */
 
 /** @defgroup OperatorConcepts concepts for operator definitions
@@ -65,7 +66,48 @@ template <typename T, typename U>
 concept is_multipliable = requires(T a, U b) { a* b; };
 template <typename T, typename U>
 concept is_dividable = requires(T a, U b) { a / b; };
+template <typename T, typename U>
+concept is_static_castable = requires(T a) { static_cast<U>(a); };
 /** @} */
+
+template <class LimitT, LimitT LOWER_BOUND, LimitT UPPER_BOUND>
+struct LimitedFloat;
+
+template <typename T>
+struct quantized_type
+{
+  using type = LimitedFloat<T, T{ 0.0 }, T{ 1.0 }>;
+};
+
+template <typename U, U LOWER_BOUND, U UPPER_BOUND>
+struct quantized_type<LimitedFloat<U, LOWER_BOUND, UPPER_BOUND>>
+{
+  using type = LimitedFloat<U, LOWER_BOUND, UPPER_BOUND>;
+};
+
+template <typename T>
+using quantized_type_t = typename quantized_type<T>::type;
+
+template <typename T>
+struct dequantized_type
+{
+  using type = T;
+};
+
+template <typename U, U LOWER_BOUND, U UPPER_BOUND>
+struct dequantized_type<LimitedFloat<U, LOWER_BOUND, UPPER_BOUND>>
+{
+  using type = U;
+};
+
+template <typename T>
+using dequantized_type_t = typename dequantized_type<T>::type;
+
+template <typename T>
+static constexpr bool is_quantized_type = std::is_same_v<T, quantized_type_t<T>>;
+
+template <typename T>
+static constexpr bool is_not_quantized_type = std::is_same_v<T, dequantized_type_t<T>>;
 
 /** @defgroup HelperConcept concepts for function definitions
  *  the concepts below mostly check for different Opinion types or types within lists
@@ -122,6 +164,15 @@ concept is_opinion_list = (is_opinion<typename FirstType<OpinionList...>::type> 
 template <typename... OpinionList>
 concept is_trusted_opinion_list =
     (is_trusted_opinion<typename FirstType<OpinionList...>::type> && is_list_of_same<OpinionList...>);
+
+template <class LIMIT_TYPE, LIMIT_TYPE LOWER_BOUND, LIMIT_TYPE UPPER_BOUND>
+struct LimitedFloat;
+
+template <typename LimitedT>
+concept is_limited_float = std::is_same_v<
+    LimitedT,
+    LimitedFloat<typename LimitedT::LIMIT_TYPE, LimitedT::LIMIT_LOWER_BOUND, LimitedT::LIMIT_UPPER_BOUND>>;
+
 /** @} */
 
 /** @defgroup ConstExprHelper constexpr definitions
@@ -139,11 +190,11 @@ concept is_trusted_opinion_list =
  * @param types - list of arbitrary parameters that are passed to func after the index of the current loop
  */
 template <auto Start, auto End, auto Inc = 1, typename... TYPES, typename Func>
-CUDA_AVAIL constexpr void constexpr_for(Func&& func, TYPES... types)
+CUDA_AVAIL constexpr void constexpr_for(Func&& func, TYPES&&... types)
 {
   if constexpr (Start < End)
   {
-    func(Start, types...);
+    func(Start, std::forward<TYPES>(types)...);
 
     // use explicit check before creating template function...
     // when not checking here, the functionality might be the same, however, a function is created with Start=End.
@@ -151,7 +202,30 @@ CUDA_AVAIL constexpr void constexpr_for(Func&& func, TYPES... types)
     // unfortunately, by this, the compiler can detect invalid array accesses and produce warnings
     if constexpr (Start + Inc < End)
     {
-      constexpr_for<Start + Inc, End, Inc, TYPES...>(func, types...);
+      constexpr_for<Start + Inc, End, Inc, TYPES...>(std::forward<Func>(func), std::forward<TYPES>(types)...);
+    }
+  }
+}
+
+// when building code using nvcc, the constexpr_for above MUST always be buildable for device and host.
+// thus, when using constexpr_for in cu code but using std c++ functions (e.g., std::vector::push_back)
+// this workaround function must be used.
+// If there would be a way of compiling the constexpr_for above only for the context it is used for, this one would no
+// longer be needed...
+template <auto Start, auto End, auto Inc = 1, typename... TYPES, typename Func>
+constexpr void constexpr_for_host(Func&& func, TYPES&&... types)
+{
+  if constexpr (Start < End)
+  {
+    func(Start, std::forward<TYPES>(types)...);
+
+    // use explicit check before creating template function...
+    // when not checking here, the functionality might be the same, however, a function is created with Start=End.
+    // thus, even that it is within if constexpr, an invalid function call syntax is created but not executed.
+    // unfortunately, by this, the compiler can detect invalid array accesses and produce warnings
+    if constexpr (Start + Inc < End)
+    {
+      constexpr_for<Start + Inc, End, Inc, TYPES...>(std::forward<Func>(func), std::forward<TYPES>(types)...);
     }
   }
 }

@@ -114,6 +114,8 @@ struct OpinionLoader
             .def("degree_of_conflict", nb::overload_cast<Opinion>(&Opinion::degree_of_conflict, nb::const_))
             .def("degree_of_harmony", nb::overload_cast<Opinion>(&Opinion::degree_of_harmony, nb::const_))
             .def("as_dirichlet", [](Opinion& op) { return static_cast<sl::DirichletDistribution<N, FloatT>>(op); })
+            .def("moment_matching_update_", &Opinion::moment_matching_update_, nb::rv_policy::reference)
+            .def("moment_matching_update", &Opinion::moment_matching_update)
             .def("cum_fuse_", &Opinion::cum_fuse_, nb::rv_policy::reference)
             .def("cum_fuse", &Opinion::cum_fuse)
             .def("cum_unfuse_", &Opinion::cum_unfuse_, nb::rv_policy::reference)
@@ -151,6 +153,12 @@ struct OpinionLoader
             .def("__repr__", &Opinion::to_string)
             .def("copy", [](const Opinion& opin) -> Opinion { return opin; });
 
+    bound_class.def("__reduce__", [=](const Opinion& a) {
+      // return its own class to allow calling the ctor later on
+      return std::make_tuple(bound_class,
+                             std::make_tuple(tuplefy_array(a.belief_masses().entries()),
+                                             tuplefy_array(a.prior_belief_masses().entries())));
+    });
     defineOpinionCtorArgs(bound_class);
     defineBinomialDependentFields(bound_class);
   }

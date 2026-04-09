@@ -20,10 +20,10 @@ TEST(MultiSourceNoBaseConflictTest, JosangExampleCumFuse)
   expected_acc_conflict += op_c2.degree_of_conflict(op_c3);
   float expected_avg_conflict = expected_acc_conflict / 3;
 
-  float acc_conflict = Conflict::conflict(Conflict::ConflictType::ACCUMULATE, op_c1, op_c2, op_c3);
+  float acc_conflict = Conflict::conflict(ConflictType::ACCUMULATE, op_c1, op_c2, op_c3);
   EXPECT_FLOAT_EQ(expected_acc_conflict, acc_conflict);
 
-  float avg_conflict = Conflict::conflict(Conflict::ConflictType::AVERAGE, op_c1, op_c2, op_c3);
+  float avg_conflict = Conflict::conflict(ConflictType::AVERAGE, op_c1, op_c2, op_c3);
   EXPECT_FLOAT_EQ(expected_avg_conflict, avg_conflict);
 }
 
@@ -55,11 +55,11 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MaxConflictMaxDim)
   }
 
   FloatT expected_acc_conflict = N * (N - 1) / 2.;
-  FloatT acc_conflict = Conflict::conflict(Conflict::ConflictType::ACCUMULATE, opinions);
+  FloatT acc_conflict = Conflict::conflict(ConflictType::ACCUMULATE, opinions);
   EXPECT_FLOAT_EQ(expected_acc_conflict, acc_conflict);
 
   FloatT expected_avg_conflict = 1.;
-  FloatT avg_conflict = Conflict::conflict(Conflict::ConflictType::AVERAGE, opinions);
+  FloatT avg_conflict = Conflict::conflict(ConflictType::AVERAGE, opinions);
   EXPECT_FLOAT_EQ(expected_avg_conflict, avg_conflict);
 }
 
@@ -74,7 +74,7 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MultiSourceConflictSharesMaxConflict)
   }
 
   auto [avg_conflict, conflict_shares] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::AVERAGE, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::AVERAGE, opinions);
 
   EXPECT_FLOAT_EQ(avg_conflict, 1.0F);
   for (std::size_t idx{ 0 }; idx < N; ++idx)
@@ -101,7 +101,7 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MultiSourceConflictSharesZeroConflict)
   }
 
   auto [avg_conflict, conflict_shares] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::AVERAGE, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::AVERAGE, opinions);
 
   EXPECT_FLOAT_EQ(avg_conflict, 0.0F);
   for (std::size_t idx{ 0 }; idx < N; ++idx)
@@ -110,7 +110,7 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MultiSourceConflictSharesZeroConflict)
   }
 
   auto [acc_conflict, conflict_shares2] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::ACCUMULATE, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::ACCUMULATE, opinions);
 
   EXPECT_FLOAT_EQ(acc_conflict, 0.0F);
   for (std::size_t idx{ 0 }; idx < N; ++idx)
@@ -127,7 +127,7 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MultiSourceConflictSharesOutlier)
   opinions[2].belief_masses()[1] = 1.0;
 
   auto [avg_conflict, conflict_shares] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::AVERAGE, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::AVERAGE, opinions);
 
   EXPECT_FLOAT_EQ(conflict_shares[0], -0.5);
   EXPECT_FLOAT_EQ(conflict_shares[1], -0.5);
@@ -145,11 +145,11 @@ TYPED_TEST(MultiSourceNoBaseConflictTest, MultiSourceBeliefConflictZeroConflict)
   }
 
   auto [cum_conflict, conflict_shares] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::BELIEF_CUMULATIVE, opinions);
-  auto [bc_conflict, conflict_shares2] = Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(
-      Conflict::ConflictType::BELIEF_BELIEF_CONSTRAINT, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::BELIEF_CUMULATIVE, opinions);
+  auto [bc_conflict, conflict_shares2] =
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::BELIEF_BELIEF_CONSTRAINT, opinions);
   auto [avg_conflict, conflict_shares3] =
-      Conflict::conflict_shares<Conflict::RelationType::CONFLICT>(Conflict::ConflictType::BELIEF_AVERAGE, opinions);
+      Conflict::conflict_shares(RelationType::CONFLICT, ConflictType::BELIEF_AVERAGE, opinions);
 
   EXPECT_FLOAT_EQ(cum_conflict, 0.0F);
   EXPECT_FLOAT_EQ(bc_conflict, 0.0F);
