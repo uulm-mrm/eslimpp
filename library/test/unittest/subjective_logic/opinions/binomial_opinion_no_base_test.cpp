@@ -140,6 +140,25 @@ TYPED_TEST(BinomialOpinionNoBaseTest, IsValid)
   EXPECT_FALSE(negative.is_valid());
 }
 
+TYPED_TEST(BinomialOpinionNoBaseTest, Quantization)
+{
+  // precision is set higher than the best possible, since numbers are converted multiple times on the way
+  double precision = 1.2 / 255;
+  const auto quant = this->variable_.get_quantized();
+
+  EXPECT_NEAR(this->variable_.belief(), quant.belief().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.disbelief(), quant.disbelief().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.uncertainty(), quant.uncertainty().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.getBinomialProjection(), quant.getBinomialProjection().as_limit_type(), precision);
+
+  const auto recovered_op = decltype(this->variable_)(quant);
+  EXPECT_NEAR(this->variable_.belief(), recovered_op.belief(), precision);
+  EXPECT_NEAR(this->variable_.disbelief(), recovered_op.disbelief(), precision);
+
+  EXPECT_EQ(this->variable_.get_quantized(), decltype(quant){ this->variable_ });
+  EXPECT_EQ(quant.get_dequantized(), decltype(this->variable_){ quant });
+}
+
 TYPED_TEST(BinomialOpinionNoBaseTest, Complement)
 {
   OpinionT<TypeParam> test_var = this->variable_.complement();

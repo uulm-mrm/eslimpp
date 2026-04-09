@@ -4,28 +4,37 @@
 // Subjective Logic - A Formalism for Reasoning Under Uncertainty,
 // Audun Jøsang, 2016, https://doi.org/10.1007/978-3-319-42337-1
 
-#include <array>
 #include <iostream>
 #include <numeric>
 #include <vector>
 
 #include "subjective_logic_lib/util.hpp"
-#include "subjective_logic_lib/opinions/opinion.hpp"
 #include "subjective_logic_lib/opinions/opinion_no_base.hpp"
+#include "subjective_logic_lib/opinions/opinion.hpp"
 
 namespace subjective_logic
 {
+template <typename OpinionTemplate>
+class TrustedOpinion;
+
+template <typename OpinionTemplate>
+using QuantizedTrustedOpinion = TrustedOpinion<typename OpinionTemplate::QuantizedT>;
 
 template <typename OpinionTemplate>
 class TrustedOpinion
 {
 public:
-  using OpinionT = OpinionTemplate;
-  static constexpr std::size_t SIZE = OpinionT::SIZE;
+  using QuantizedT = QuantizedTrustedOpinion<OpinionTemplate>;
+  using DeQuantizedT = TrustedOpinion<typename OpinionTemplate::DeQuantizedT>;
+  static constexpr bool is_quantized = OpinionTemplate::is_quantized;
+  static constexpr bool is_not_quantized = (not is_quantized);
+
+  static constexpr std::size_t SIZE = OpinionTemplate::SIZE;
   // define Float in two ways, so that it is compatible with Opinions and nice to use (FloatT)
-  using FLOAT_t = typename OpinionT::FLOAT_t;
+  using FLOAT_t = typename OpinionTemplate::FLOAT_t;
   using FloatT = FLOAT_t;
   using TrustT = Trust<FloatT>;
+  using OpinionT = OpinionTemplate;
 
   /**
    * @brief accessor to simplify the access to the Opinions of TrustedOpinions stored in a vector
@@ -33,7 +42,16 @@ public:
    * @param trusted_opinions
    * @return
    */
-  static std::vector<OpinionT> extractOpinions(const std::vector<TrustedOpinion<OpinionT>>& trusted_opinions);
+  static std::vector<OpinionT> extractOpinions(const std::vector<TrustedOpinion>& trusted_opinions);
+  /**
+   * @brief accessor to simplify the access to the Opinions of TrustedOpinions stored in a fixed sized array
+   *        opinions are copied during extraction
+   *        this function is cuda ready
+   * @param trusted_opinions
+   * @return
+   */
+  template <std::size_t N>
+  CUDA_AVAIL static Array<N, OpinionT> extractOpinions(const Array<N, TrustedOpinion>& trusted_opinions);
 
   /**
    * @brief accessor to simplify the access to the Opinions of TrustedOpinions stored in a vector
@@ -53,6 +71,16 @@ public:
   static std::vector<TrustT> extractTrusts(const std::vector<TrustedOpinion>& trusted_opinions);
 
   /**
+   * @brief accessor to simplify the access to the Trusts of TrustedOpinions stored in a fixed sized array
+   *        opinions are copied during extraction
+   *        this function is cuda ready
+   * @param trusted_opinions
+   * @return
+   */
+  template <std::size_t N>
+  CUDA_AVAIL static Array<N, TrustT> extractTrusts(const Array<N, TrustedOpinion>& trusted_opinions);
+
+  /**
    * @brief accessor to simplify the access to the Trusts of TrustedOpinions stored in a vector
    *        opinions are NOT copied, but referenced during extraction
    * @param trusted_opinions
@@ -69,6 +97,16 @@ public:
   static std::vector<OpinionT> extractDiscountedOpinions(const std::vector<TrustedOpinion>& trusted_opinions);
 
   /**
+   * @brief accessor to simplify the access to the Opinions of TrustedOpinions stored in a fixed sized array
+   *        opinions are copied during extraction
+   *        this function is cuda ready
+   * @param trusted_opinions
+   * @return
+   */
+  template <std::size_t N>
+  CUDA_AVAIL static Array<N, OpinionT> extractDiscountedOpinions(const Array<N, TrustedOpinion>& trusted_opinions);
+
+  /**
    * @brief default ctor leads to a vacuous opinion with vacuous trust
    */
   TrustedOpinion() = default;
@@ -78,39 +116,71 @@ public:
    * @param trust
    * @param opinion
    */
+  CUDA_AVAIL
   TrustedOpinion(TrustT trust, OpinionT opinion);
+
+  /**
+   * @brief creates a TrustedOpinion from a quantized or normal version of it ()
+   *        thus, it may either be a usual copy ctor, or the conversion between quantized and dequantized
+   * @param other_opinion
+   */
+  template <typename T>
+  CUDA_AVAIL explicit constexpr TrustedOpinion(T other_opinion)
+    requires(
+        // either of both will always be the same as the current OpinionNoBase
+        std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>);
 
   /**
    * @brief checks for both opinion and trust to be valid
    */
-  constexpr bool is_valid() const;
+  CUDA_AVAIL
+  [[nodiscard]] constexpr bool is_valid() const;
+
+  /**
+   * @brief returns a quantized opinion that uses a 1-byte float representation
+   */
+  CUDA_AVAIL
+  constexpr QuantizedT get_quantized() const
+    requires is_not_quantized;
+
+  /**
+   * @brief returns a dequantized opinion
+   */
+  CUDA_AVAIL
+  constexpr DeQuantizedT get_dequantized() const
+    requires is_quantized;
 
   /**
    * @brief accessor to the trust part
    * @return
    */
+  CUDA_AVAIL
   TrustT& trust();
   /**
    * @brief const accessor to the trust part
    * @return
    */
+  CUDA_AVAIL
   const TrustT& trust() const;
 
   /**
    * @brief accessor to the opinion part
    * @return
    */
+  CUDA_AVAIL
   OpinionT& opinion();
   /**
    * @brief const accessor to the opinion part
    * @return
    */
+  CUDA_AVAIL
   const OpinionT& opinion() const;
 
   /**
    * @brief calculates and returns the opinion which is already discounted by the trust part of this class
    * @return
    */
+  CUDA_AVAIL
   OpinionT discounted_opinion() const;
 
   /**
@@ -119,6 +189,7 @@ public:
    * @param revision_factor
    * @return
    */
+  CUDA_AVAIL
   TrustedOpinion& revise_trust_(FloatT revision_factor);
 
   /**
@@ -127,6 +198,7 @@ public:
    * @param revision_factor
    * @return
    */
+  CUDA_AVAIL
   TrustedOpinion revise_trust(FloatT revision_factor) const;
 
   /**
@@ -135,6 +207,7 @@ public:
    * @param other
    * @return
    */
+  CUDA_AVAIL
   std::pair<TrustedOpinion&, TrustedOpinion&> revise_trust_(TrustedOpinion& other);
   /**
    * @brief applies the concept of trust revision described in [1]
@@ -142,6 +215,7 @@ public:
    * @param other
    * @return
    */
+  CUDA_AVAIL
   std::pair<TrustedOpinion, TrustedOpinion> revise_trust(TrustedOpinion other) const;
 
   /**
@@ -156,7 +230,6 @@ public:
    * @brief generates a readable string containing the belief masses and the uncertainty for opinion and trust
    * @return
    */
-  CUDA_AVAIL
   explicit operator std::string() const;
 
   /**
@@ -183,6 +256,14 @@ TrustedOpinion<OpinionT>::extractOpinions(const std::vector<TrustedOpinion<Opini
                  trusted_opinions.cend(),
                  std::back_inserter(opinions),
                  [](TrustedOpinion<OpinionT> top) { return top.opinion(); });
+  return opinions;
+}
+template <typename OpinionT>
+template <std::size_t N>
+Array<N, OpinionT> TrustedOpinion<OpinionT>::extractOpinions(const Array<N, TrustedOpinion<OpinionT>>& trusted_opinions)
+{
+  Array<N, OpinionT> opinions;
+  constexpr_for<0, N>([&](std::size_t idx) { opinions[idx] = trusted_opinions[idx].opinion(); });
   return opinions;
 }
 
@@ -213,6 +294,16 @@ TrustedOpinion<OpinionT>::extractTrusts(const std::vector<TrustedOpinion>& trust
 }
 
 template <typename OpinionT>
+template <std::size_t N>
+Array<N, typename TrustedOpinion<OpinionT>::TrustT>
+TrustedOpinion<OpinionT>::extractTrusts(const Array<N, TrustedOpinion>& trusted_opinions)
+{
+  Array<N, TrustT> trusts;
+  constexpr_for<0, N>([&](std::size_t idx) { trusts[idx] = trusted_opinions[idx].trust(); });
+  return trusts;
+}
+
+template <typename OpinionT>
 std::vector<std::reference_wrapper<typename TrustedOpinion<OpinionT>::TrustT>>
 TrustedOpinion<OpinionT>::extractTrustsRef(std::vector<TrustedOpinion>& trusted_opinions)
 {
@@ -234,8 +325,18 @@ TrustedOpinion<OpinionT>::extractDiscountedOpinions(const std::vector<TrustedOpi
   std::transform(trusted_opinions.cbegin(),
                  trusted_opinions.cend(),
                  std::back_inserter(discounted_opinions),
-                 [](TrustedOpinion top) { return top.discounted_opinion(); });
+                 [](const TrustedOpinion top) { return top.discounted_opinion(); });
   return discounted_opinions;
+}
+
+template <typename OpinionT>
+template <std::size_t N>
+Array<N, typename TrustedOpinion<OpinionT>::OpinionT>
+TrustedOpinion<OpinionT>::extractDiscountedOpinions(const Array<N, TrustedOpinion>& trusted_opinions)
+{
+  Array<N, OpinionT> opinions;
+  constexpr_for<0, N>([&](std::size_t idx) { opinions[idx] = trusted_opinions[idx].discounted_opinion(); });
+  return opinions;
 }
 
 template <typename OpinionT>
@@ -243,10 +344,34 @@ TrustedOpinion<OpinionT>::TrustedOpinion(TrustT trust, OpinionT opinion) : trust
 {
 }
 
+template <typename OpinionTemplate>
+template <typename T>
+constexpr TrustedOpinion<OpinionTemplate>::TrustedOpinion(T other_opinion)
+  requires(
+      // either of both will always be the same as the current OpinionNoBase
+      std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>)
+  : TrustedOpinion(TrustT{ other_opinion.trust() }, OpinionT{ other_opinion.opinion() })
+{
+}
+
 template <typename OpinionT>
 constexpr bool TrustedOpinion<OpinionT>::is_valid() const
 {
   return trust_.is_valid() and opinion_.is_valid();
+}
+
+template <typename OpinionT>
+constexpr QuantizedTrustedOpinion<OpinionT> TrustedOpinion<OpinionT>::get_quantized() const
+  requires is_not_quantized
+{
+  return QuantizedT(trust_.get_quantized(), opinion_.get_quantized());
+}
+
+template <typename OpinionT>
+constexpr TrustedOpinion<OpinionT>::DeQuantizedT TrustedOpinion<OpinionT>::get_dequantized() const
+  requires is_quantized
+{
+  return DeQuantizedT(trust_.get_dequantized(), opinion_.get_dequantized());
 }
 
 template <typename OpinionT>

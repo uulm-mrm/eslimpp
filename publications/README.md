@@ -19,14 +19,23 @@ If the repository is already available and a venv with eslimpp installed was cre
   cd eslimpp/publications
   
   # install evaluation specific requirements
-  pip install -r eSLIM++/requirements.txt
+  pip install -r [publication directory]/requirements.txt
   
   # run desired evaluation script
-  python eSLIM++/classification_task.py
+  python [publication directory]/classification_task.py
+  
+  # for example:
+  # pip install -r eSLIM++/requirements.txt
+  # python eSLIM++/classification_task.py
 ```
+
+# Script Generating Images 
+Some scripts in the subsequent publication directories will create images used in the accompanied paper.
+In contrast to other evaluation scripts, these may require some additional packages, such as `cm-super`, `dvipng`, `texlive`, and `texlive-latex-extra` for generating the barycentric triangle pictures.
+Evaluations in general can be run as described above, in case of errors, the additional packages may be required.
 
 
 # Citation
-For each of the publications in this directory, citation information should be available in the respective directories.
+For each of the publications in this directory, citation information is available in the respective directories.
 If you are using the reference implementations provided by any such publication for your research, please consider adding the respective citation to your work.
 If you implement your work using eSLIM++ please cite the eSLIM++ publication as described [here](../README.md) in any case.

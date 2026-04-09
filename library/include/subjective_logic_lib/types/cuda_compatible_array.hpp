@@ -28,6 +28,9 @@ namespace subjective_logic
 template <std::size_t N, typename T>
 struct Array
 {
+  template <std::size_t M, typename U>
+  friend struct Array;
+
   using iterator = IteratorClass<T, false>;
   using reverse_iterator = IteratorClass<T, true>;
   using const_iterator = IteratorClass<const T, false>;
@@ -36,6 +39,7 @@ struct Array
   /**
    * @brief constexpr access to the template parameter N, similar interface to std container
    */
+  CUDA_AVAIL
   static constexpr std::size_t size()
   {
     return N;
@@ -43,10 +47,18 @@ struct Array
   using value_type = T;
 
   /**
-   * @brief default ctor will fill every entry explicitly with 0
+   * @brief default ctor will fill every entry explicitly with 0, if T is constructable with 0
    */
   CUDA_AVAIL
-  constexpr Array();
+  constexpr Array()
+    requires requires { T{ 0 }; };
+
+  /**
+   * @brief default ctor will fill every entry using the default ctor of T
+   */
+  CUDA_AVAIL
+  constexpr Array()
+    requires(!requires { T{ 0 }; });
 
   /**
    * @brief default_entry is copy assigned to each element
@@ -54,6 +66,13 @@ struct Array
    */
   CUDA_AVAIL
   constexpr explicit Array(T default_entry);
+
+  /**
+   * @brief ctor with implicit value conversion
+   */
+  template <typename OtherT>
+  CUDA_AVAIL explicit constexpr Array(Array<N, OtherT> other)
+    requires is_static_castable<OtherT, T>;
 
   constexpr Array(const Array& other) = default;
   constexpr Array(Array&& other) = default;
@@ -69,14 +88,14 @@ struct Array
    */
   template <typename... VALUES>
   CUDA_AVAIL constexpr explicit Array(VALUES... values)
-    requires(sizeof...(VALUES) == N and (std::is_convertible_v<VALUES, T> && ...));
+    requires(sizeof...(VALUES) == N and (is_static_castable<VALUES, T> && ...));
 
   /**
    * @brief factory function allowing the initialization with a value list
    */
   template <typename... VALUES>
   CUDA_AVAIL constexpr void array_factory(T value, VALUES... values)
-    requires(sizeof...(VALUES) == 0 or (std::is_convertible_v<VALUES, T> && ...));
+    requires(sizeof...(VALUES) == 0 or (is_static_castable<VALUES, T> && ...));
 
   constexpr Array& operator=(const Array& other) = default;
   constexpr Array& operator=(Array&& other) = default;
@@ -116,10 +135,8 @@ struct Array
   CUDA_AVAIL
   constexpr const T& operator[](std::size_t idx) const;
 
-  CUDA_AVAIL
   explicit operator std::string() const;
 
-  CUDA_AVAIL
   [[nodiscard]] std::string to_string() const;
 
   /**
@@ -130,6 +147,15 @@ struct Array
    * @brief convert functions to stl container, not available with CUDA
    */
   std::array<T, N> as_array() const;
+
+  /**
+   * @brief get direct const access to the entries to avoid copy to array for raw access
+   */
+  CUDA_AVAIL
+  auto const& entries() const
+  {
+    return entries_;
+  }
 
   ///////////////
   // all non assigning operators with scalar values are defined outside class
@@ -187,6 +213,13 @@ struct Array
     requires is_dividable<T, U>;
   ///@}
 
+  template <typename OtherT>
+  CUDA_AVAIL constexpr explicit operator Array<N, OtherT>() const
+    requires is_static_castable<T, OtherT>;
+
+  CUDA_AVAIL
+  constexpr bool operator==(const Array& other) const;
+
   /**
    * @brief summing all elements in the array
    */
@@ -195,31 +228,55 @@ struct Array
     requires requires(T a, T b) { a + b; };
 
 protected:
-  T entries[N];
+  T entries_[N];
 };
 
 template <std::size_t N, typename T>
 constexpr Array<N, T>::Array()
+  requires requires { T{ 0 }; }
 {
-  fill(static_cast<T>(0));
+  fill(T{ 0 });
+}
+
+template <std::size_t N, typename T>
+constexpr Array<N, T>::Array()
+  requires(!requires { T{ 0 }; })
+{
+  fill(T{});
 }
 
 template <std::size_t N, typename T>
 constexpr Array<N, T>::Array(T default_entry)
 {
-  constexpr_for<0, N, 1>([this, &default_entry](std::size_t idx) { entries[idx] = default_entry; });
+  fill(default_entry);
+}
+
+template <std::size_t N, typename T>
+template <typename OtherT>
+constexpr Array<N, T>::Array(Array<N, OtherT> other)
+  requires is_static_castable<OtherT, T>
+{
+  constexpr_for<0, N>([this, other](std::size_t idx) { entries_[idx] = static_cast<T>(other.entries_[idx]); });
+}
+
+template <std::size_t N, typename T>
+template <typename OtherT>
+constexpr Array<N, T>::operator Array<N, OtherT>() const
+  requires is_static_castable<T, OtherT>
+{
+  return Array<N, OtherT>(*this);
 }
 
 template <std::size_t N, typename T>
 constexpr Array<N, T>::Array(std::array<T, N> other)
 {
-  std::memcpy(entries, other.data(), sizeof(T) * other.size());
+  std::memcpy(entries_, other.data(), sizeof(T) * other.size());
 }
 
 template <std::size_t N, typename T>
 template <typename... VALUES>
 constexpr Array<N, T>::Array(VALUES... values)
-  requires(sizeof...(VALUES) == N and (std::is_convertible_v<VALUES, T> && ...))
+  requires(sizeof...(VALUES) == N and (is_static_castable<VALUES, T> && ...))
 {
   array_factory(values...);
 }
@@ -227,11 +284,11 @@ constexpr Array<N, T>::Array(VALUES... values)
 template <std::size_t N, typename T>
 template <typename... VALUES>
 constexpr void Array<N, T>::array_factory(T value, VALUES... values)
-  requires(sizeof...(VALUES) == 0 or (std::is_convertible_v<VALUES, T> && ...))
+  requires(sizeof...(VALUES) == 0 or (is_static_castable<VALUES, T> && ...))
 {
   constexpr std::size_t idx{ sizeof...(VALUES) };
 
-  entries[(N - 1) - idx] = static_cast<T>(value);
+  entries_[(N - 1) - idx] = static_cast<T>(value);
   if constexpr (idx > 0)
   {
     array_factory(values...);
@@ -241,79 +298,79 @@ constexpr void Array<N, T>::array_factory(T value, VALUES... values)
 template <std::size_t N, typename T>
 constexpr void Array<N, T>::fill(T entry)
 {
-  constexpr_for<0, N, 1>([this, entry](std::size_t idx) { entries[idx] = entry; });
+  constexpr_for<0, N, 1>([this, entry](std::size_t idx) { entries_[idx] = entry; });
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::iterator Array<N, T>::begin()
+constexpr Array<N, T>::iterator Array<N, T>::begin()
 {
-  return iterator{ &entries[0] };
+  return iterator{ &entries_[0] };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::const_iterator Array<N, T>::begin() const
+constexpr Array<N, T>::const_iterator Array<N, T>::begin() const
 {
-  return const_iterator{ &entries[0] };
+  return const_iterator{ &entries_[0] };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::iterator Array<N, T>::end()
+constexpr Array<N, T>::iterator Array<N, T>::end()
 {
-  return iterator{ &entries[N - 1] + 1 };
+  return iterator{ &entries_[N - 1] + 1 };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::const_iterator Array<N, T>::end() const
+constexpr Array<N, T>::const_iterator Array<N, T>::end() const
 {
-  return const_iterator{ &entries[N - 1] + 1 };
+  return const_iterator{ &entries_[N - 1] + 1 };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::reverse_iterator Array<N, T>::rbegin()
+constexpr Array<N, T>::reverse_iterator Array<N, T>::rbegin()
 {
-  return reverse_iterator{ &entries[N - 1] };
+  return reverse_iterator{ &entries_[N - 1] };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::const_reverse_iterator Array<N, T>::rbegin() const
+constexpr Array<N, T>::const_reverse_iterator Array<N, T>::rbegin() const
 {
-  return const_reverse_iterator{ &entries[N - 1] };
+  return const_reverse_iterator{ &entries_[N - 1] };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::reverse_iterator Array<N, T>::rend()
+constexpr Array<N, T>::reverse_iterator Array<N, T>::rend()
 {
-  return reverse_iterator{ &entries[0] - 1 };
+  return reverse_iterator{ &entries_[0] - 1 };
 }
 
 template <std::size_t N, typename T>
-constexpr typename Array<N, T>::const_reverse_iterator Array<N, T>::rend() const
+constexpr Array<N, T>::const_reverse_iterator Array<N, T>::rend() const
 {
-  return const_reverse_iterator{ &entries[0] - 1 };
+  return const_reverse_iterator{ &entries_[0] - 1 };
 }
 
 template <std::size_t N, typename T>
 constexpr T& Array<N, T>::front()
 {
-  return entries[0];
+  return entries_[0];
 }
 
 template <std::size_t N, typename T>
 constexpr const T& Array<N, T>::front() const
 {
-  return entries[0];
+  return entries_[0];
 }
 
 template <std::size_t N, typename T>
 constexpr T& Array<N, T>::back()
 {
-  return entries[N - 1];
+  return entries_[N - 1];
 }
 
 template <std::size_t N, typename T>
 constexpr const T& Array<N, T>::back() const
 {
-  return entries[N - 1];
+  return entries_[N - 1];
 }
 
 template <std::size_t N, typename T, typename U>
@@ -333,7 +390,7 @@ template <std::size_t N, typename T, typename U>
 CUDA_AVAIL Array<N, T> operator-(U value, Array<N, T> array)
   requires is_substractable<U, T>
 {
-  constexpr_for<0, N, 1>([&] CUDA_AVAIL(std::size_t idx) { array[idx] = value - array[idx]; });
+  constexpr_for<0, N>([&] CUDA_AVAIL(std::size_t idx) { array[idx] = value - array[idx]; });
   return array;
   // return value + ((-1) * array); although possible, it would make use of multiple loops
 }
@@ -361,7 +418,7 @@ template <std::size_t N, typename T, typename U>
 CUDA_AVAIL Array<N, T> operator/(U value, Array<N, T> array)
   requires is_dividable<U, T>
 {
-  constexpr_for<0, N, 1>([&] CUDA_AVAIL(std::size_t idx) { array[idx] = value / array[idx]; });
+  constexpr_for<0, N>([&] CUDA_AVAIL(std::size_t idx) { array[idx] = value / array[idx]; });
   return array;
 }
 template <std::size_t N, typename T, typename U>
@@ -383,7 +440,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator+=(const Array<N, U>& other)
   requires is_addable<T, U>
 {
-  constexpr_for<0, N, 1>([this, &other] CUDA_AVAIL(std::size_t idx) { entries[idx] += other[idx]; });
+  constexpr_for<0, N>([this, &other](std::size_t idx) { entries_[idx] += other[idx]; });
   return *this;
 }
 template <std::size_t N, typename T>
@@ -391,7 +448,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator+=(const U& value)
   requires is_addable<T, U>
 {
-  constexpr_for<0, N, 1>([this, value] CUDA_AVAIL(std::size_t idx) { entries[idx] += value; });
+  constexpr_for<0, N>([this, value](std::size_t idx) { entries_[idx] += value; });
   return *this;
 }
 
@@ -407,7 +464,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator-=(const Array<N, U>& other)
   requires is_substractable<T, U>
 {
-  constexpr_for<0, N, 1>([this, &other] CUDA_AVAIL(std::size_t idx) { entries[idx] -= other[idx]; });
+  constexpr_for<0, N>([this, &other](std::size_t idx) { entries_[idx] -= other[idx]; });
   return *this;
 }
 template <std::size_t N, typename T>
@@ -415,7 +472,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator-=(const U& value)
   requires is_substractable<T, U>
 {
-  constexpr_for<0, N, 1>([this, value] CUDA_AVAIL(std::size_t idx) { entries[idx] -= value; });
+  constexpr_for<0, N>([this, value](std::size_t idx) { entries_[idx] -= value; });
   return *this;
 }
 
@@ -431,7 +488,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator*=(const Array<N, U>& other)
   requires is_multipliable<T, U>
 {
-  constexpr_for<0, N, 1>([this, &other] CUDA_AVAIL(std::size_t idx) { entries[idx] *= other[idx]; });
+  constexpr_for<0, N>([this, &other](std::size_t idx) { entries_[idx] *= other[idx]; });
   return *this;
 }
 template <std::size_t N, typename T>
@@ -439,7 +496,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator*=(const U& value)
   requires is_multipliable<T, U>
 {
-  constexpr_for<0, N, 1>([this, value] CUDA_AVAIL(std::size_t idx) { entries[idx] *= value; });
+  constexpr_for<0, N>([this, value](std::size_t idx) { entries_[idx] *= value; });
   return *this;
 }
 
@@ -455,7 +512,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator/=(const Array<N, U>& other)
   requires is_dividable<T, U>
 {
-  constexpr_for<0, N, 1>([this, &other] CUDA_AVAIL(std::size_t idx) { entries[idx] /= other[idx]; });
+  constexpr_for<0, N>([this, &other](std::size_t idx) { entries_[idx] /= other[idx]; });
   return *this;
 }
 template <std::size_t N, typename T>
@@ -463,7 +520,7 @@ template <typename U>
 constexpr Array<N, T>& Array<N, T>::operator/=(const U& value)
   requires is_dividable<T, U>
 {
-  constexpr_for<0, N, 1>([this, value] CUDA_AVAIL(std::size_t idx) { entries[idx] /= value; });
+  constexpr_for<0, N>([this, value](std::size_t idx) { entries_[idx] /= value; });
   return *this;
 }
 
@@ -471,21 +528,42 @@ template <std::size_t N, typename T>
 constexpr T Array<N, T>::sum() const
   requires requires(T a, T b) { a + b; }
 {
-  T sum{ entries[0] };
-  constexpr_for<1, N, 1>([this, &sum] CUDA_AVAIL(std::size_t idx) { sum += entries[idx]; });
+#ifdef __CUDA_ARCH__
+  T sum{ entries_[0] };
+  for (int i{ 1 }; i < N; ++i)
+  {
+    sum += entries_[i];
+  }
   return sum;
+#else
+  T sum{ entries_[0] };
+  // start by 1 is indented, since sum already contains first element
+  constexpr_for<1, N>([this, &sum](std::size_t idx) { sum += entries_[idx]; });
+  return sum;
+#endif
 }
 
 template <std::size_t N, typename T>
 constexpr T& Array<N, T>::operator[](std::size_t idx)
 {
-  return entries[idx];
+  return entries_[idx];
 }
 
 template <std::size_t N, typename T>
 constexpr const T& Array<N, T>::operator[](std::size_t idx) const
 {
-  return entries[idx];
+  return entries_[idx];
+}
+
+template <std::size_t N, typename T>
+constexpr bool Array<N, T>::operator==(const Array& other) const
+{
+  bool equal{ true };
+  constexpr_for<0, N>([this, &other, &equal](std::size_t idx) {
+    using std::abs;
+    equal &= abs(entries_[idx] - other.entries_[idx]) < EPS_v<T>;
+  });
+  return equal;
 }
 
 template <std::size_t N, typename T>
@@ -511,7 +589,7 @@ std::string Array<N, T>::to_string() const
     {
       out += " ";
     }
-    out += std::to_string(entries[idx]);
+    out += std::to_string(entries_[idx]);
   }
   out += "]";
   return out;
@@ -522,7 +600,9 @@ std::vector<T> Array<N, T>::as_vector() const
 {
   std::vector<T> out;
   out.reserve(N);
-  constexpr_for<1, N>([this, &out](std::size_t idx) { out.push_back(this->entries[idx]); });
+  // if compiled in nvcc, the constexpr_for is also available on __device__ and therefor has issues with host functions
+  // even on host... thus, a workaround is used here.
+  constexpr_for_host<0, N>([this, &out](std::size_t idx) { out.push_back(this->entries_[idx]); });
   return out;
 }
 
@@ -530,7 +610,7 @@ template <std::size_t N, typename T>
 std::array<T, N> Array<N, T>::as_array() const
 {
   std::array<T, N> out;
-  constexpr_for<1, N>([this, &out](std::size_t idx) { out[idx] = this->entries[idx]; });
+  constexpr_for_host<0, N>([this, &out](std::size_t idx) { out[idx] = this->entries_[idx]; });
   return out;
 }
 

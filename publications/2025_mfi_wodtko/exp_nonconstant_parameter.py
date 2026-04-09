@@ -35,8 +35,8 @@ reliabilities_start = [0.1, 0.95, 0.95, 0.95, 0.95]
 reliabilities_end = [0.6, 0.1, 0.3, 0.95, 0.95]
 
 weighted_types_cs_avg = [
-    (sl.TrustRevision.TrustRevisionType.REFERENCE_FUSION, sl.Conflict.ConflictType.BELIEF_AVERAGE, 0.2),
-    (sl.TrustRevision.TrustRevisionType.HARMONY_REFERENCE_FUSION, sl.Conflict.ConflictType.BELIEF_AVERAGE, 0.2),
+    sl.WeightedTypes(sl.RelationType.CONFLICT, sl.TrustRevisionType.REFERENCE_FUSION, sl.ConflictType.BELIEF_AVERAGE, 0.2),
+    sl.WeightedTypes(sl.RelationType.HARMONY, sl.TrustRevisionType.REFERENCE_FUSION, sl.ConflictType.BELIEF_AVERAGE, 0.2),
 ]
 
 trusts = [[] for _ in range(num_agents)]
@@ -88,14 +88,15 @@ with alive_bar(num_mc_runs) as bar:
             avg_uncertainty = uncertainty_sum / num_agents
             updated_weights = []
             for entry in weighted_types_cs_avg:
-                updated_weights.append((
-                    entry[0],
-                    entry[1],
-                    entry[2]
+                updated_weights.append(sl.WeightedTypes(
+                    entry.relation_type,
+                    entry.trust_revision_type,
+                    entry.conflict_type,
+                    entry.weight
                     # entry[2] * avg_uncertainty,
                 ))
 
-            fusion_result, trusted_opinions = sl.TrustedFusion.fuse_opinions_(sl.Fusion.FusionType.CUMULATIVE,
+            fusion_result, trusted_opinions = sl.TrustedFusion.fuse_opinions_(sl.FusionType.CUMULATIVE,
                                                                               updated_weights, trusted_opinions)
             for t_op in trusted_opinions:
                 t_op.trust.trust_discount_(0.999)

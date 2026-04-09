@@ -130,6 +130,32 @@ TYPED_TEST(BinomialOpinionTest, IsValid)
   EXPECT_FALSE(negative.is_valid());
 }
 
+TYPED_TEST(BinomialOpinionTest, Quantization)
+{
+  // precision is set higher than the best possible, since numbers are converted multiple times on the way
+  double precision = 1.2 / 255;
+  const auto quant = this->variable_.get_quantized();
+
+  // uncertainty is calculated using the belief masses -> multiple precision losses
+  EXPECT_NEAR(this->variable_.belief(), quant.belief().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.disbelief(), quant.disbelief().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.uncertainty(), quant.uncertainty().as_limit_type(), 2.0 * precision);
+  EXPECT_NEAR(this->variable_.getBinomialProjection(), quant.getBinomialProjection().as_limit_type(), 2.0 * precision);
+  EXPECT_NEAR(this->variable_.prior_belief(), quant.prior_belief().as_limit_type(), precision);
+  EXPECT_NEAR(this->variable_.prior_disbelief(), quant.prior_disbelief().as_limit_type(), precision);
+
+  const auto recovered_op = decltype(this->variable_)(quant);
+  EXPECT_NEAR(this->variable_.belief(), recovered_op.belief(), precision);
+  EXPECT_NEAR(this->variable_.disbelief(), recovered_op.disbelief(), precision);
+  EXPECT_NEAR(this->variable_.uncertainty(), recovered_op.uncertainty(), 2.0 * precision);
+  EXPECT_NEAR(this->variable_.getBinomialProjection(), recovered_op.getBinomialProjection(), 2.0 * precision);
+  EXPECT_NEAR(this->variable_.prior_belief(), recovered_op.prior_belief(), precision);
+  EXPECT_NEAR(this->variable_.prior_disbelief(), recovered_op.prior_disbelief(), precision);
+
+  EXPECT_EQ(this->variable_.get_quantized(), decltype(quant){ this->variable_ });
+  EXPECT_EQ(quant.get_dequantized(), decltype(this->variable_){ quant });
+}
+
 TYPED_TEST(BinomialOpinionTest, Complement)
 {
   TypeParam test_var = this->variable_.complement();
@@ -184,7 +210,8 @@ TYPED_TEST(BinomialOpinionTest, NeutralBeliefOpinion)
 TYPED_TEST(BinomialOpinionTest, VacuousBeliefOpinion)
 {
   TypeParam test = TypeParam::VacuousBeliefOpinion();
-  TypeParam expected{ TypeParam::VacuousBeliefDistr(), TypeParam::VacuousBeliefDistr() };
+  // prior must always be set valid -> Vacuous is invalid here
+  TypeParam expected{ TypeParam::VacuousBeliefDistr(), TypeParam::NeutralBeliefDistr() };
 
   EXPECT_EQ(test, expected);
 }
