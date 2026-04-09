@@ -41,3 +41,20 @@ It shall be mentioned that, at the of writing, the use of the dst library was no
 How certain (fusion)operators are meant to be applied was not fully apparent to the author.
 Respectively, the DST evaluation uses one specific operator for fusion, and the categorization is deactivated, since the author was not aware of how to access the belief_mass of a certain set.
 That being said, the DST Evaluation is available, but take a little longer; for more runs (>10) the eval execution takes some time.
+
+
+# Citation
+Please use the following citation for reference to the publication in this directory (`2025_mfi_wodtko_eslimpp.bib`):
+```bibtex
+@INPROCEEDINGS{wodtko2025eslimpp,
+  author={Wodtko, Thomas and Griebel, Thomas and Buchholz, Michael},
+  booktitle={2025 IEEE International Conference on Multisensor Fusion and Integration for Intelligent Systems (MFI)},
+  title={eSLIM++ - An Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces},
+  year={2025},
+  volume={},
+  number={},
+  pages={1-7},
+  keywords={Computer science;Uncertainty;Autonomous systems;Decision making;C++ languages;Sensor fusion;Libraries;Reproducibility of results;Logic;Object tracking},
+  doi={10.1109/MFI67357.2025.11259193}
+}
+```

@@ -13,6 +13,7 @@
 
 #include "subjective_logic_lib/util.hpp"
 #include "subjective_logic_lib/types/cuda_compatible_array.hpp"
+#include "subjective_logic_lib/types/limited_float.hpp"
 
 namespace subjective_logic
 {
@@ -20,6 +21,12 @@ namespace subjective_logic
 // forward declaration to allow the declaration of convert functions
 template <std::size_t N, typename FloatT>
 class DirichletDistribution;
+
+template <std::size_t N, typename FloatT>
+class OpinionNoBase;
+
+template <std::size_t N, typename FloatT = float>
+using QuantizedOpinionNoBase = OpinionNoBase<N, ZeroOneFloat<FloatT>>;
 
 /**
  * @brief this class is meant to be used in large arrays and,
@@ -40,6 +47,11 @@ template <std::size_t N = 2, typename FloatT = float>
 class OpinionNoBase
 {
 public:
+  using QuantizedT = QuantizedOpinionNoBase<N, FloatT>;
+  using DeQuantizedT = OpinionNoBase<N, dequantized_type_t<FloatT>>;
+  static constexpr bool is_quantized = is_quantized_type<FloatT>;
+  static constexpr bool is_not_quantized = (not is_quantized);
+
   using BeliefType = Array<N, FloatT>;
 
   // helper to have accessible types/values when used from outside;
@@ -59,11 +71,30 @@ public:
   explicit constexpr OpinionNoBase(BeliefType belief_masses);
 
   /**
+   * @brief creates a OpinionNoBase from either a quantized or normal version of it
+   *        thus, it may either be a usual copy ctor, or the conversion between quantized and dequantized
+   * @param other_opinion
+   */
+  template <typename T>
+  CUDA_AVAIL explicit constexpr OpinionNoBase(T other_opinion)
+    requires(
+        // either of both will always be the same as the current OpinionNoBase
+        std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>);
+
+  /**
    * @brief allows to use the ctor with the correct number of arguments instead of requiring an initializer list
    */
   template <typename... VALUES>
   CUDA_AVAIL constexpr explicit OpinionNoBase(VALUES... values)
     requires(is_arithmetic_list<VALUES...> and sizeof...(VALUES) == N);
+
+  /**
+   * @brief convenience conversion between Opinions and DirichletDistributions
+   *        prior is implicitly ignored.
+   */
+  template <typename DirFloatT>
+  CUDA_AVAIL constexpr explicit OpinionNoBase(DirichletDistribution<N, DirFloatT> dirichlet)
+    requires std::is_convertible_v<DirFloatT, FloatT>;
 
   /**
    * @brief default copy ctor
@@ -97,17 +128,32 @@ public:
   /**
    * @brief checks for the sum of belief_masses to be 1 up to an error of EPS<FloatT>
    */
-  constexpr bool is_valid() const;
+  CUDA_AVAIL
+  [[nodiscard]] constexpr bool is_valid() const;
 
   /**
-   * @brief allows a convenient access to the belief_distribution since it is inherited its access must be explicitly
+   * @brief returns a quantized opinion that uses a 1-byte float representation
+   */
+  CUDA_AVAIL
+  constexpr QuantizedT get_quantized() const
+    requires(is_not_quantized);
+
+  /**
+   * @brief returns a dequantized opinion
+   */
+  CUDA_AVAIL
+  constexpr DeQuantizedT get_dequantized() const
+    requires(is_quantized);
+
+  /**
+   * @brief allows convenient access to the belief_distribution since it is inherited its access must be explicitly
    * defined
    * @return
    */
   CUDA_AVAIL
   constexpr BeliefType& belief_masses();
   /**
-   * @brief allows a convenient access to the belief_distribution since it is inherited its access must be explicitly
+   * @brief allows convenient access to the belief_distribution since it is inherited its access must be explicitly
    * defined
    * @return
    */
@@ -115,7 +161,7 @@ public:
   constexpr const BeliefType& belief_masses() const;
 
   /**
-   * @brief allows a convenient access to a belief_distribution entry
+   * @brief allows convenient access to a belief_distribution entry
    * defined
    * @return
    */
@@ -123,7 +169,7 @@ public:
   constexpr FloatT& belief_mass(std::size_t idx);
 
   /**
-   * @brief allows a convenient access to a belief_distribution entry
+   * @brief allows convenient access to a belief_distribution entry
    * defined
    * @return
    */
@@ -196,7 +242,7 @@ public:
   constexpr OpinionNoBase interpolate(OpinionNoBase other, FloatT interp_fac) const;
 
   /**
-   * @brief a neutral distribution assigns the an equal amount of evidence to each belief_mass entry
+   * @brief a neutral distribution assigns an equal amount of evidence to each belief_mass entry
    *        the resulting belief distribution sums up to 1, i.e., if interpreted as an Opinion, the uncertainty would be
    * 0.
    * @return a neutral opinion
@@ -259,7 +305,7 @@ public:
    * @return the projected probability
    */
   CUDA_AVAIL
-  constexpr FloatT getBinomialProjection(FloatT base_rate = 0.5) const
+  constexpr FloatT getBinomialProjection(FloatT base_rate = FloatT{ 0.5 }) const
     requires is_binomial<N>;
 
   /**
@@ -373,7 +419,9 @@ public:
    * @return multiplied opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase& multiply_(OpinionNoBase other, FloatT base_this = 0.5, FloatT base_other = 0.5)
+  constexpr OpinionNoBase& multiply_(OpinionNoBase other,
+                                     FloatT base_this = FloatT{ 0.5 },
+                                     FloatT base_other = FloatT{ 0.5 })
     requires is_binomial<N>;
 
   /**
@@ -384,25 +432,35 @@ public:
    * @return multiplied opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase multiply(OpinionNoBase other, FloatT base_this = 0.5, FloatT base_other = 0.5) const
+  constexpr OpinionNoBase multiply(OpinionNoBase other,
+                                   FloatT base_this = FloatT{ 0.5 },
+                                   FloatT base_other = FloatT{ 0.5 }) const
     requires is_binomial<N>;
 
   /**
    * @brief applies the concept of comultiplication of [1] inplace
    * @param other
+   * @param base_this
+   * @param base_other
    * @return comultiplied opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase& comultiply_(OpinionNoBase other, FloatT base_this = 0.5, FloatT base_other = 0.5)
+  constexpr OpinionNoBase& comultiply_(OpinionNoBase other,
+                                       FloatT base_this = FloatT{ 0.5 },
+                                       FloatT base_other = FloatT{ 0.5 })
     requires is_binomial<N>;
 
   /**
    * @brief applies the concept of comultiplication of [1] using a copy
    * @param other
+   * @param base_this
+   * @param base_other
    * @return comultiplied opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase comultiply(OpinionNoBase other, FloatT base_this = 0.5, FloatT base_other = 0.5) const
+  constexpr OpinionNoBase comultiply(OpinionNoBase other,
+                                     FloatT base_this = FloatT{ 0.5 },
+                                     FloatT base_other = FloatT{ 0.5 }) const
     requires is_binomial<N>;
 
   /**
@@ -540,7 +598,7 @@ public:
   constexpr OpinionNoBase moment_matching_update(BeliefType probabilities) const;
 
   /**
-   * @brief applies the concept of trust discounting of [1] inplace, when using a Opinion for discounting its base rate
+   * @brief applies the concept of trust discounting of [1] inplace, when using an Opinion for discounting its base rate
    * must be available the projected probability of the other trust Opinion tells, how much information is kept. i.e.,
    * prop=1 means no discounting, prop=0 means the output has an uncertainty of 1.
    * @param other
@@ -548,16 +606,16 @@ public:
    * @return the trust discounted opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase& trust_discount_(OpinionNoBase<2, FloatT> other, FloatT base_rate = 0.5);
+  constexpr OpinionNoBase& trust_discount_(OpinionNoBase<2, FloatT> other, FloatT base_rate = FloatT{ 0.5 });
   /**
-   * @brief applies the concept of trust discounting of [1] using a copy, when using a Opinion for discounting its base
+   * @brief applies the concept of trust discounting of [1] using a copy, when using an Opinion for discounting its base
    * rate must be available
    * @param other
    * @param base_rate
    * @return the trust discounted opinion
    */
   CUDA_AVAIL
-  constexpr OpinionNoBase trust_discount(OpinionNoBase<2, FloatT> other, FloatT base_rate = 0.5) const;
+  constexpr OpinionNoBase trust_discount(OpinionNoBase<2, FloatT> other, FloatT base_rate = FloatT{ 0.5 }) const;
   /**
    * @brief applies the concept of trust discounting of [1] inplace
    *        the probability is interpreted as the projected probability of a trust opinion
@@ -589,7 +647,7 @@ public:
   CUDA_AVAIL
   constexpr OpinionNoBase& limited_trust_discount_(FloatT limit,
                                                    OpinionNoBase<2, FloatT> other,
-                                                   FloatT base_rate = 0.5);
+                                                   FloatT base_rate = FloatT{ 0.5 });
   /**
    * @brief applies the concept of trust discounting of [1] using a copy
    *        in addition to the trust discount a limit for the resulting uncertainty can be set.
@@ -604,7 +662,7 @@ public:
   CUDA_AVAIL
   constexpr OpinionNoBase limited_trust_discount(FloatT limit,
                                                  OpinionNoBase<2, FloatT> other,
-                                                 FloatT base_rate = 0.5) const;
+                                                 FloatT base_rate = FloatT{ 0.5 }) const;
   /**
    * @brief applies the concept of trust discounting of [1] inplace
    *        the probability is interpreted as the projected probability of a trust opinion
@@ -714,7 +772,7 @@ public:
    * @brief converts opinion_no_base to a Dirichlet distribution preserving evidence and using a non informative prior
    */
   CUDA_AVAIL
-  constexpr operator DirichletDistribution<N, FloatT>() const;
+  constexpr explicit operator DirichletDistribution<N, FloatT>() const;
 
   /**
    * @brief generates a readable string containing the belief masses and the uncertainty
@@ -728,14 +786,30 @@ public:
    */
   [[nodiscard]] std::string to_string() const;
 
+  /**
+   * @brief generates a readable char output given a suitable input buffer
+   * @return
+   */
+  CUDA_AVAIL
+  void to_char_buffer(char* buffer, std::size_t max_length) const;
+
 protected:
   // belief distribution represents the evidence for each hypothesis of the considered domain
   BeliefType belief_masses_;
 };
 
 template <std::size_t N, typename FloatT>
-constexpr OpinionNoBase<N, FloatT>::OpinionNoBase(OpinionNoBase::BeliefType belief_masses)
-  : belief_masses_{ belief_masses }
+constexpr OpinionNoBase<N, FloatT>::OpinionNoBase(BeliefType belief_masses) : belief_masses_{ belief_masses }
+{
+}
+
+template <std::size_t N, typename FloatT>
+template <typename T>
+constexpr OpinionNoBase<N, FloatT>::OpinionNoBase(T other_opinion)
+  requires(
+      // either of both will always be the same as the current OpinionNoBase
+      std::is_same_v<std::remove_cvref_t<T>, QuantizedT> or std::is_same_v<std::remove_cvref_t<T>, DeQuantizedT>)
+  : OpinionNoBase{ BeliefType(other_opinion.belief_masses()) }
 {
 }
 
@@ -754,6 +828,20 @@ constexpr bool OpinionNoBase<N, FloatT>::is_valid() const
   constexpr_for<0, N>(
       [&valid_entries, this](std::size_t idx) { valid_entries &= belief_masses_[idx] >= -EPS_v<FloatT>; });
   return valid_entries and belief_masses_.sum() < static_cast<FloatT>(1.0) + EPS_v<FloatT>;
+}
+
+template <std::size_t N, typename FloatT>
+constexpr QuantizedOpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::get_quantized() const
+  requires(is_not_quantized)
+{
+  return QuantizedT(static_cast<QuantizedT::BeliefType>(belief_masses_));
+}
+
+template <std::size_t N, typename FloatT>
+constexpr OpinionNoBase<N, FloatT>::DeQuantizedT OpinionNoBase<N, FloatT>::get_dequantized() const
+  requires(is_quantized)
+{
+  return DeQuantizedT(static_cast<DeQuantizedT::BeliefType>(belief_masses_));
 }
 
 template <std::size_t N, typename FloatT>
@@ -819,7 +907,7 @@ constexpr FloatT OpinionNoBase<N, FloatT>::belief_mass(std::size_t idx) const
 template <std::size_t N, typename FloatT>
 constexpr FloatT OpinionNoBase<N, FloatT>::uncertainty() const
 {
-  return static_cast<FloatT>(1.0) - belief_masses_.sum();
+  return FloatT{ static_cast<FloatT>(1.0) - belief_masses_.sum() };
 }
 
 template <std::size_t N, typename FloatT>
@@ -845,7 +933,7 @@ constexpr OpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::interpolate(Opinion
 template <std::size_t N, typename FloatT>
 constexpr typename OpinionNoBase<N, FloatT>::BeliefType OpinionNoBase<N, FloatT>::NeutralBeliefDistr()
 {
-  return BeliefType{ static_cast<FloatT>(1.0) / N };
+  return BeliefType{ FloatT{ static_cast<FloatT>(1.0) / N } };
 }
 
 template <std::size_t N, typename FloatT>
@@ -928,7 +1016,7 @@ template <std::size_t N, typename FloatT>
 constexpr FloatT OpinionNoBase<N, FloatT>::getBinomialProjection(FloatT base_rate) const
   requires is_binomial<N>
 {
-  return belief() + uncertainty() * base_rate;
+  return FloatT{ belief() + uncertainty() * base_rate };
 }
 
 template <std::size_t N, typename FloatT>
@@ -945,7 +1033,7 @@ template <std::size_t N, typename FloatT>
 constexpr FloatT OpinionNoBase<N, FloatT>::uncertainty_differential(OpinionNoBase other) const
 {
   FloatT uncert{ this->uncertainty() };
-  return uncert / (uncert + other.uncertainty());
+  return FloatT{ uncert / (uncert + other.uncertainty()) };
 }
 
 template <std::size_t N, typename FloatT>
@@ -954,11 +1042,12 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_conflict(OpinionNoBase othe
                                                               FloatT base_rate_other) const
   requires is_binomial<N>
 {
-  FloatT proj_prob_distance =
-      std::abs(this->getBinomialProjection(base_rate) - other.getBinomialProjection(base_rate_other));
-  FloatT conjunctive_certainty = (1 - this->uncertainty()) * (1 - other.uncertainty());
+  using std::abs;
+  FloatT proj_prob_distance{ abs(this->getBinomialProjection(base_rate) -
+                                 other.getBinomialProjection(base_rate_other)) };
+  FloatT conjunctive_certainty{ (1 - this->uncertainty()) * (1 - other.uncertainty()) };
 
-  return proj_prob_distance * conjunctive_certainty;
+  return FloatT{ proj_prob_distance * conjunctive_certainty };
 }
 
 template <std::size_t N, typename FloatT>
@@ -966,6 +1055,7 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_conflict(OpinionNoBase othe
                                                               BeliefType base_rate,
                                                               BeliefType base_rate_other) const
 {
+  using std::abs;
   if constexpr (is_binomial<N>)
   {
     return degree_of_conflict(other, base_rate.front(), base_rate_other.front());
@@ -974,12 +1064,12 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_conflict(OpinionNoBase othe
   BeliefType prob_this = getProjection(base_rate);
   BeliefType prob_other = other.getProjection(base_rate);
 
-  constexpr_for<0, N, 1>([&](std::size_t idx) { proj_prob_distance += std::abs(prob_this[idx] - prob_other[idx]); });
+  constexpr_for<0, N, 1>([&](std::size_t idx) { proj_prob_distance += abs(prob_this[idx] - prob_other[idx]); });
   proj_prob_distance /= 2.;
 
-  FloatT conjunctive_certainty = (1 - this->uncertainty()) * (1 - other.uncertainty());
+  FloatT conjunctive_certainty{ (1 - this->uncertainty()) * (1 - other.uncertainty()) };
 
-  return proj_prob_distance * conjunctive_certainty;
+  return FloatT{ proj_prob_distance * conjunctive_certainty };
 }
 
 template <std::size_t N, typename FloatT>
@@ -988,11 +1078,12 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_harmony(OpinionNoBase other
                                                              FloatT base_rate_other) const
   requires is_binomial<N>
 {
-  FloatT proj_prob_distance =
-      std::abs(this->getBinomialProjection(base_rate) - other.getBinomialProjection(base_rate_other));
-  FloatT conjunctive_certainty = (1 - this->uncertainty()) * (1 - other.uncertainty());
+  using std::abs;
+  FloatT proj_prob_distance{ abs(this->getBinomialProjection(base_rate) -
+                                 other.getBinomialProjection(base_rate_other)) };
+  FloatT conjunctive_certainty{ (1 - this->uncertainty()) * (1 - other.uncertainty()) };
 
-  return (1 - proj_prob_distance) * conjunctive_certainty;
+  return FloatT{ (1 - proj_prob_distance) * conjunctive_certainty };
 }
 
 template <std::size_t N, typename FloatT>
@@ -1000,6 +1091,7 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_harmony(OpinionNoBase other
                                                              BeliefType base_rate,
                                                              BeliefType base_rate_other) const
 {
+  using std::abs;
   if constexpr (is_binomial<N>)
   {
     return degree_of_conflict(other, base_rate.front(), base_rate_other.front());
@@ -1008,12 +1100,12 @@ constexpr FloatT OpinionNoBase<N, FloatT>::degree_of_harmony(OpinionNoBase other
   BeliefType prob_this = getProjection(base_rate);
   BeliefType prob_other = other.getProjection(base_rate);
 
-  constexpr_for<0, N, 1>([&](std::size_t idx) { proj_prob_distance += std::abs(prob_this[idx] - prob_other[idx]); });
+  constexpr_for<0, N, 1>([&](std::size_t idx) { proj_prob_distance += abs(prob_this[idx] - prob_other[idx]); });
   proj_prob_distance /= 2.;
 
-  FloatT conjunctive_certainty = (1 - this->uncertainty()) * (1 - other.uncertainty());
+  FloatT conjunctive_certainty{ (1 - this->uncertainty()) * (1 - other.uncertainty()) };
 
-  return (1 - proj_prob_distance) * conjunctive_certainty;
+  return FloatT{ (1 - proj_prob_distance) * conjunctive_certainty };
 }
 
 template <std::size_t N, typename FloatT>
@@ -1037,7 +1129,16 @@ template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::revise_trust_(FloatT revision_factor)
   requires is_binomial<N>
 {
-  revision_factor = std::clamp(revision_factor, static_cast<FloatT>(-1.0), static_cast<FloatT>(1.0));
+  // revision_factor = std::clamp(revision_factor, static_cast<FloatT>(-1.0), static_cast<FloatT>(1.0));
+  // std::clamp not available with CUDA
+  if (revision_factor > 1.0)
+  {
+    revision_factor = 1.0;
+  }
+  else if (revision_factor < -1.0)
+  {
+    revision_factor = -1.0;
+  }
 
   if (revision_factor < 0)
   {
@@ -1112,11 +1213,12 @@ constexpr OpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::comultiply(OpinionN
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cum_fuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
-  FloatT denom = uncert_this + uncert_other - uncert_this * uncert_other;
-
-  if (std::abs(denom) < EPS_v<FloatT>)
+  FloatT denom{ uncert_this + uncert_other - uncert_this * uncert_other };
+  if (abs(denom) < EPS_v<FloatT>)
   {
     // Jøsang suggests a boundary value consideration,
     // however, since no further information about the uncertainty values is available,
@@ -1137,11 +1239,13 @@ constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cum_fuse_(OpinionN
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cum_unfuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
-  FloatT denom = uncert_other - uncert_this + uncert_other * uncert_this;
+  FloatT denom = { uncert_other - uncert_this + uncert_other * uncert_this };
 
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
     // Jøsang suggests a boundary value consideration,
     // however, since no further information about the uncertainty values is available,
@@ -1209,16 +1313,18 @@ constexpr FloatT OpinionNoBase<N, FloatT>::conflict(OpinionNoBase other) const
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::bc_fuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   BeliefType harmony = this->harmony(other);
   FloatT conflict = this->conflict(other);
 
-  if (std::abs(1 - conflict) < EPS_v<FloatT>)
+  if (abs(1 - conflict) < EPS_v<FloatT>)
   {
     belief_masses_ = NeutralBeliefDistr();
     return *this;
   }
 
-  FloatT normalizer = 1 - conflict;
+  auto normalizer = FloatT{ 1 - conflict };
   constexpr_for<0, N, 1>(
       [this, harmony, normalizer] CUDA_AVAIL(std::size_t idx) { belief_masses_[idx] = harmony[idx] / normalizer; });
 
@@ -1234,11 +1340,12 @@ constexpr OpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::bc_fuse(OpinionNoBa
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::average_fuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
-  FloatT denom = uncert_this + uncert_other;
-
-  if (std::abs(denom) < EPS_v<FloatT>)
+  FloatT denom{ uncert_this + uncert_other };
+  if (abs(denom) < EPS_v<FloatT>)
   {
     constexpr_for<0, N, 1>([&](std::size_t idx) {
       // Jøsang suggests a boundary value consideration,
@@ -1264,11 +1371,13 @@ constexpr OpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::average_fuse(Opinio
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::average_unfuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
   FloatT denom = static_cast<FloatT>(2.0) * uncert_other - uncert_this;
 
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
     constexpr_for<0, N, 1>([&](std::size_t idx) {
       // Jøsang suggests a boundary value consideration,
@@ -1299,16 +1408,16 @@ constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cc_fuse_(OpinionNo
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
 
-  BeliefType consensus{ 0. };
+  BeliefType consensus{ FloatT{ 0. } };
   FloatT consensus_sum{ 0. };
   BeliefType resA = belief_masses_;
   BeliefType resB = other.belief_masses_;
 
-  BeliefType compromise{ 0 };
+  BeliefType compromise{ FloatT{ 0. } };
   FloatT compromise_sum{ 0. };
 
   constexpr_for<0, N, 1>([&](std::size_t idx) {
-    FloatT consens = fminf(belief_masses_[idx], other.belief_masses_[idx]);
+    FloatT consens{ fminf(static_cast<float>(belief_masses_[idx]), static_cast<float>(other.belief_masses_[idx])) };
     consensus[idx] = consens;
     consensus_sum += consens;
     resA[idx] -= consensus[idx];
@@ -1337,9 +1446,9 @@ constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cc_fuse_(OpinionNo
     compromise_sum += compromise[idx];
   });
 
-  FloatT uncert_pre = uncert_this * uncert_other;
+  FloatT uncert_pre{ uncert_this * uncert_other };
 
-  if (fabs(compromise_sum) < EPS_v<FloatT>)
+  if (fabs(static_cast<double>(compromise_sum)) < EPS_v<FloatT>)
   {
     // compromise gets smaller with a decreasing amount of belief masses
     // thus return a vacuous opinion as a result
@@ -1347,7 +1456,7 @@ constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::cc_fuse_(OpinionNo
     return *this;
   }
 
-  FloatT normalization = (1 - consensus_sum - uncert_pre) / compromise_sum;
+  auto normalization = FloatT{ (1 - consensus_sum - uncert_pre) / compromise_sum };
 
   // merge consensus and compromise
   constexpr_for<0, N, 1>([this, consensus, compromise, normalization] CUDA_AVAIL(std::size_t idx) {
@@ -1381,13 +1490,15 @@ constexpr OpinionNoBase<N, FloatT> OpinionNoBase<N, FloatT>::moment_matching_upd
 template <std::size_t N, typename FloatT>
 constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::wb_fuse_(OpinionNoBase other)
 {
+  using std::abs;
+
   FloatT uncert_this = this->uncertainty();
   FloatT uncert_other = other.uncertainty();
-  FloatT denom = uncert_this + uncert_other - 2 * uncert_this * uncert_other;
+  FloatT denom{ uncert_this + uncert_other - 2 * uncert_this * uncert_other };
 
-  if (std::abs(denom) < EPS_v<FloatT>)
+  if (abs(denom) < EPS_v<FloatT>)
   {
-    if (std::abs(uncert_this * uncert_other) < EPS_v<FloatT>)
+    if (abs(uncert_this * uncert_other) < EPS_v<FloatT>)
     {
       // Jøsang suggests a boundary value consideration,
       // however, since no further information about the uncertainty values is available,
@@ -1488,13 +1599,15 @@ constexpr OpinionNoBase<N, FloatT>& OpinionNoBase<N, FloatT>::deduction_(FloatT 
                                                                          OpinionNoBase cond_2)
   requires is_binomial<N>
 {
+  using std::abs;
+
   FloatT a_y_nom = base_x * cond_1.belief() + (1 - base_x) * cond_2.belief();
   FloatT a_y_denom = 1 - (base_x * cond_1.uncertainty() + (1 - base_x) * cond_2.uncertainty());
 
   // if denom is too small (combination of vacuous conditional and base rate of x) simply take x's base rate
   // nothing is specifically defined in [1]
   FloatT a_y = base_x;
-  if (std::abs(a_y_denom) > EPS_v<FloatT>)
+  if (abs(a_y_denom) > EPS_v<FloatT>)
   {
     a_y = a_y_nom / a_y_denom;
   }
@@ -1644,13 +1757,7 @@ OpinionNoBase<newN, FloatT> constexpr OpinionNoBase<N, FloatT>::getReducedOpinio
 template <std::size_t N, typename FloatT>
 constexpr bool OpinionNoBase<N, FloatT>::operator==(const OpinionNoBase<N, FloatT>& other) const
 {
-  FloatT diff{ 0. };
-
-  for (std::size_t idx{ 0 }; idx < N; ++idx)
-  {
-    diff += std::abs(belief_masses_[idx] - other.belief_masses_[idx]);
-  }
-  return diff < EPS_v<FloatT>;
+  return belief_masses_ == other.belief_masses_;
 }
 
 template <std::size_t N, typename FloatT>
@@ -1663,20 +1770,41 @@ inline std::ostream& operator<<(std::ostream& out, OpinionNoBase<N, FloatT> cons
 template <std::size_t N, typename FloatT>
 std::string OpinionNoBase<N, FloatT>::to_string() const
 {
+  using std::to_string;
   if constexpr (is_binomial<N>)
   {
-    return std::string{ "[bel: " } + std::to_string(belief()) + "; disbel: " + std::to_string(disbelief()) +
-           "; uncertainty: " + std::to_string(uncertainty()) + "]";
+    return std::string{ "[bel: " } + to_string(belief()) + "; disbel: " + to_string(disbelief()) +
+           "; uncertainty: " + to_string(uncertainty()) + "]";
   }
 
   std::string out{ "[bel masses: " };
   for (const auto& mass : belief_masses_)
   {
-    out += std::to_string(mass) + ", ";
+    out += to_string(mass) + ", ";
   }
-  out += "uncertainty: " + std::to_string(uncertainty()) + "]";
+  out += "uncertainty: " + to_string(uncertainty()) + "]";
 
   return out;
+}
+
+template <std::size_t N, typename FloatT>
+void OpinionNoBase<N, FloatT>::to_char_buffer(char* buffer, std::size_t max_length) const
+{
+  if constexpr (is_binomial<N>)
+  {
+    snprintf(buffer, max_length, "[bel: %f; disbel: %f; uncert: %f]", belief(), disbelief(), uncertainty());
+    return;
+  }
+
+  int offset = 0;
+  offset += snprintf(buffer + offset, max_length - offset, "[");
+  for (std::size_t idx{ 0 }; idx < N; ++idx)
+  {
+    offset += snprintf(buffer + offset, max_length - offset, "%.2f%s", belief_masses_[idx], (idx < N - 1) ? ", " : "");
+    if (offset >= max_length)
+      break;  // prevent overflow
+  }
+  snprintf(buffer + offset, max_length - offset, "]\0");
 }
 
 template <std::size_t N, typename FloatT>

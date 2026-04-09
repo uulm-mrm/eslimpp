@@ -1,0 +1,10 @@
+
+__pycache__
+.idea
+
+*.pdf
+*.csv
+
+**/build
+
+**/dist

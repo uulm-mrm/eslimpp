@@ -2,9 +2,13 @@
 SET(TEST_NAME subjective_logic_test)
 
 set(SL_VARIABLE_TEST_FILES
+
+        container/long_short_term_memory.cpp
+
         # single opinion type tests
         types/cuda_compatible_array_test.cpp
         types/dirichlet_distribution_test.cpp
+        types/limited_float.cpp
 
         opinions/binomial_opinion_no_base_test.cpp
         opinions/binomial_opinion_test.cpp
@@ -22,22 +26,13 @@ set(SL_VARIABLE_TEST_FILES
 add_executable(${TEST_NAME}
     ${SL_VARIABLE_TEST_FILES}
 )
-
-set(SL_OPERATOR_TEST_FILES
-    operator_test.cpp
-)
-add_executable(operator_test
-    ${SL_OPERATOR_TEST_FILES}
-)
-
-foreach(target ${TEST_NAME} operator_test)
+foreach(target ${TEST_NAME} )
     target_link_libraries(${target}
-      PUBLIC
-        subjective_logic_lib::subjective_logic_lib
+            PUBLIC
+            subjective_logic_lib::subjective_logic_lib
     )
 
     target_compile_features(${target} PUBLIC cxx_std_20)
-
 endforeach()
 
 
@@ -46,17 +41,17 @@ if (${COVERAGE})
     target_link_libraries(${TEST_NAME}
             PRIVATE
             -fprofile-arcs -ftest-coverage
-            )
+    )
     target_compile_options(${TEST_NAME} PRIVATE --coverage -g -O0)
 endif()
 
 target_link_libraries( ${TEST_NAME}
-  PRIVATE
-    GTest::gtest_main
+        PRIVATE
+        GTest::gtest
+        GTest::gtest_main
 )
 gtest_discover_tests(${TEST_NAME})
 
-
 # append target to test executables (for correct installation)
 set(UNITTEST_EXECUTABLES "${UNITTEST_EXECUTABLES};${TEST_NAME}" PARENT_SCOPE)
-set(UNITTEST_PLAYGROUND_EXECUTABLES "${UNITTEST_PLAYGROUND_EXECUTABLES};operator_test" PARENT_SCOPE)
+

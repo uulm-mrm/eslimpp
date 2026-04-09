@@ -60,8 +60,8 @@ struct DirichletLoader
     auto bound_class =
         nb::class_<Dirichlet>(bound_module, module_name.c_str())
             .def(nb::init())
-            .def(nb::init<Array>())
-            .def(nb::init<Array, Array>())
+            .def(nb::init<Array>(), nb::arg("alphas"))
+            .def(nb::init<Array, Array>(), nb::arg("evidences"), nb::arg("prior"))
             .def_static("from_evidences", &Dirichlet::from_evidences)
             .def_prop_rw(
                 "evidences",
@@ -83,7 +83,15 @@ struct DirichletLoader
             .def("variances", &Dirichlet::variance)
             .def("moment_matching_update_", &Dirichlet::moment_matching_update_, nb::rv_policy::reference)
             .def("moment_matching_update", &Dirichlet::moment_matching_update)
-            .def("copy", [](const Dirichlet& dir) -> Dirichlet { return dir; });
+            .def("copy", [](const Dirichlet& dir) -> Dirichlet { return dir; })
+            .def(nb::self == nb::self);
+
+    bound_class.def("__reduce__", [=](const Dirichlet& a) {
+      // return its own class to allow calling the ctor later on
+      return std::make_tuple(
+          bound_class, std::make_tuple(tuplefy_array(a.evidences().entries()), tuplefy_array(a.priors().entries())));
+    });
+
     defineArrayCtorArgs(bound_class);
     defineBinomialDependentFields(bound_class);
   }

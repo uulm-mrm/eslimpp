@@ -80,7 +80,7 @@ struct OpinionNoBaseLoader
             .def(nb::init<BeliefType>(), nb::arg("belief_masses"))
             .def(nb::init<const Opinion&>())
             .def(nb::init<Opinion&&>())
-            .def("__deepcopy__", [](const Opinion& a, nb::dict memo) -> Opinion { return a; })
+            .def("__deepcopy__", [](const Opinion& a, const nb::dict& memo) -> Opinion { return a; })
             // access to prop with reference is important!!
             // otherwise, opinion.belief_masses[0] = 1 inside python would not write to the current opinion
             .def_prop_rw(
@@ -104,6 +104,8 @@ struct OpinionNoBaseLoader
             .def("degree_of_harmony",
                  nb::overload_cast<Opinion, BeliefType, BeliefType>(&Opinion::degree_of_harmony, nb::const_))
             .def("as_dirichlet", [](Opinion& op) { return static_cast<sl::DirichletDistribution<N, FloatT>>(op); })
+            .def("moment_matching_update_", &Opinion::moment_matching_update_, nb::rv_policy::reference)
+            .def("moment_matching_update", &Opinion::moment_matching_update)
             .def("cum_fuse_", &Opinion::cum_fuse_, nb::rv_policy::reference)
             .def("cum_fuse", &Opinion::cum_fuse)
             .def("cum_unfuse_", &Opinion::cum_unfuse_, nb::rv_policy::reference)
@@ -142,6 +144,11 @@ struct OpinionNoBaseLoader
             .def(nb::self == nb::self)
             .def("__repr__", &Opinion::to_string)
             .def("copy", [](const Opinion& opin) -> Opinion { return opin; });
+
+    bound_class.def("__reduce__", [=](const Opinion& a) {
+      // return its own class to allow calling the ctor later on
+      return std::make_tuple(bound_class, tuplefy_array(a.belief_masses().entries()));
+    });
 
     defineOpinionNoBaseCtorArgs(bound_class);
     defineBinomialDependentFields(bound_class);

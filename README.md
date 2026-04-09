@@ -1,13 +1,3 @@
-# For the Reviewers
-## Review of the paper: "eSLIM++ - an Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces"
-To run the evaluation scripts reproducing the paper presentations, please refer to the following install/use instructions for [Python](publications/README.md) and [C++](publications/eSLIM++/README.md)\
-For general use, please follow the instructions below.
-## Review of the paper: "Balancing Conflict and Harmony - Persistent Trust Revision in Time-Dependent Subjective Networks"
-A description of the experiment scripts is provided [here](publications/2025_mfi_wodtko/README.md), which uses the eslimpp library.
-General information for Python evaluations apply [see here](publications/README.md).
-
-[![tests](https://github.com/uulm-mrm/eslimpp/actions/workflows/cpp_test.yml/badge.svg?branch=main)](https://github.com/uulm-mrm/eslimpp/actions/workflows/cpp_test.yml)
-[![codecov](https://codecov.io/gh/uulm-mrm/eslimpp/graph/badge.svg?token=WQR9SF8QOU)](https://codecov.io/gh/uulm-mrm/eslimpp)
 ![](misc/eSLIM_logo.png)
 
 # eSLIM++ - efficient Subjective Logic IMplementation in C++
@@ -121,12 +111,25 @@ Community driven updates are highly welcomed, if doing so, please be aware of th
 
 
 # Acompaning publication
-Introducing this library, there is currently a paper under review at the IEEE International Conference on Multisensor Fusion and Integration.
-The reviewers are highly welcome to check out the code and run the example scripts producing the results presented in this work.
-Details of the publication will follow, if applicable.
+Introducing this library, a paper was published at the 2025 IEEE International Conference on Multisensor Fusion and Integration.
+This paper introduces some fundamentals and outlines some methods and algorithms from the references/applications above, which are implemented in eSLIM++.
+The paper is called\
+"eSLIM++ - An Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces"
 
-# Citation
-I would be delighted if eSLIM++ were used in other projects that might get published at some point.
+## Citation
+I would be delighted if eSLIM++ were used in other projects that might get published at some point.\
 In this case, please cite the library with its introduction paper.
-A citation description will be available upon publication.
+```bibtex
+@INPROCEEDINGS{wodtko2025eslimpp,
+  author={Wodtko, Thomas and Griebel, Thomas and Buchholz, Michael},
+  booktitle={2025 IEEE International Conference on Multisensor Fusion and Integration for Intelligent Systems (MFI)}, 
+  title={eSLIM++ - An Efficient Subjective Logic Implementation in C++ Providing Easy-to-Use Python Interfaces}, 
+  year={2025},
+  volume={},
+  number={},
+  pages={1-7},
+  keywords={Computer science;Uncertainty;Autonomous systems;Decision making;C++ languages;Sensor fusion;Libraries;Reproducibility of results;Logic;Object tracking},
+  doi={10.1109/MFI67357.2025.11259193}
+}  
+```
 

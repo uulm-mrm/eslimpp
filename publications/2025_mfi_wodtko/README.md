@@ -2,7 +2,7 @@
 
 The scripts in this directory will create some of the images used in the paper with the title above.
 More importantly, it also reproduces the evaluation results presented in the paper.
-Evaluations can be run as described in [here](../README.md), for generating the images, some additional packages are required (`cm-super`,`texlive`, `texlive-latex-extra`).
+Evaluations can be run as described in [here](../README.md).
 
 ## Experiment description
 To obtain the results of the first experiment run the script `symmetric_tr.py` >
@@ -28,3 +28,18 @@ TLDR:
       exp_distribution.py
    ```
 
+# Citation
+Please use the following citation for reference to the publication in this directory (`2025_mfi_wodtko_balancing.bib`):
+```bibtex
+@INPROCEEDINGS{wodtko2025balancing,
+  author={Wodtko, Thomas and Buchholz, Michael},
+  booktitle={2025 IEEE International Conference on Multisensor Fusion and Integration for Intelligent Systems (MFI)},
+  title={Balancing Conflict and Harmony - Persistent Trust Revision in Time-Dependent Subjective Networks},
+  year={2025},
+  volume={},
+  number={},
+  pages={1-8},
+  keywords={Monte Carlo methods;Uncertainty;Estimation;Sensor systems and applications;Random variables;Reliability;Logic;Intelligent systems},
+  doi={10.1109/MFI67357.2025.11259128}
+}
+```

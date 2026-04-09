@@ -51,6 +51,32 @@ TYPED_TEST(MultinomialOpinionTest, Ctor)
   }
 }
 
+TYPED_TEST(MultinomialOpinionTest, Quantization)
+{
+  // precision is set higher than the best possible, since numbers are converted multiple times on the way
+  double precision = 1.2 / 255;
+  const auto quant = this->variable_.get_quantized();
+
+  // in some testcases the precision is multiplied with TypeParam::Size
+  // this is necessary and OK I guess since the uncertainty is obtained by subtracting imprecise numbers from 1.0
+  // respectively often. also everything that needs the uncertainty may also be incorrect to the same extend.
+  for (std::size_t idx{ 0 }; idx < TypeParam::SIZE; ++idx)
+  {
+    EXPECT_NEAR(this->variable_.belief_masses()[idx], quant.belief_masses()[idx].as_limit_type(), precision);
+    EXPECT_NEAR(
+        this->variable_.getProjection()[idx], quant.getProjection()[idx].as_limit_type(), TypeParam::SIZE * precision);
+  }
+  EXPECT_NEAR(this->variable_.uncertainty(), quant.uncertainty().as_limit_type(), TypeParam::SIZE * precision);
+
+  const auto recovered_op = decltype(this->variable_)(quant);
+  for (std::size_t idx{ 0 }; idx < TypeParam::SIZE; ++idx)
+  {
+    EXPECT_NEAR(this->variable_.belief_masses()[idx], recovered_op.belief_masses()[idx], precision);
+    EXPECT_NEAR(this->variable_.getProjection()[idx], recovered_op.getProjection()[idx], TypeParam::SIZE * precision);
+  }
+  EXPECT_NEAR(this->variable_.uncertainty(), recovered_op.uncertainty(), TypeParam::SIZE * precision);
+}
+
 TYPED_TEST(MultinomialOpinionTest, Uncertainty)
 {
   ASSERT_FLOAT_EQ(this->variable_.uncertainty(), this->kUncertaintyMass_);

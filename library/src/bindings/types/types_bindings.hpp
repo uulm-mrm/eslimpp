@@ -13,3 +13,4 @@
 
 void loadCudaCompatibleArrayBindings(::nanobind::module_& bound_module);
 void loadDirichletDistributionBindings(::nanobind::module_& bound_module);
+void loadAllFusionTypes(::nanobind::module_& bound_module);

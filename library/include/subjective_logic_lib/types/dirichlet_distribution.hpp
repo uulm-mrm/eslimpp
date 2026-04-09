@@ -22,6 +22,9 @@ namespace subjective_logic
 template <std::size_t N, typename FloatT>
 class Opinion;
 
+template <std::size_t N, typename FloatT>
+class OpinionNoBase;
+
 template <std::size_t N, typename FloatT = float>
 class DirichletDistribution
 {
@@ -60,41 +63,52 @@ public:
     requires(is_arithmetic_list<VALUES...> and sizeof...(VALUES) == N);
 
   /**
+   * @brief convenience conversion between Opinions and DirichletDistributions
+   *        prior is implicitly ignored/ default constructed.
+   */
+  template <typename OpFloatT>
+  CUDA_AVAIL constexpr explicit DirichletDistribution(OpinionNoBase<N, OpFloatT> opinion)
+    requires std::is_convertible_v<OpFloatT, FloatT>;
+
+  /**
+   * @brief convenience conversion between Opinions and DirichletDistributions
+   *        prior is implicitly ignored.
+   */
+  template <typename OpFloatT>
+  CUDA_AVAIL constexpr explicit DirichletDistribution(Opinion<N, OpFloatT> opinion)
+    requires std::is_convertible_v<OpFloatT, FloatT>;
+
+  /**
    * @brief default copy ctor
    * @param other
    */
-  CUDA_AVAIL
   constexpr DirichletDistribution(const DirichletDistribution& other) = default;
 
   /**
    * @brief default move ctor
    * @param other
    */
-  CUDA_AVAIL
   constexpr DirichletDistribution(DirichletDistribution&& other) = default;
 
   /**
    * @brief default copy assignment
    * @param other
    */
-  CUDA_AVAIL
   constexpr DirichletDistribution& operator=(const DirichletDistribution& other) = default;
 
   /**
    * @brief default move assignment
    * @param other
    */
-  CUDA_AVAIL
   constexpr DirichletDistribution& operator=(DirichletDistribution&& other) = default;
 
   /**
    * @brief default dtor (not virtual!!!!, see description above)
    */
-  CUDA_AVAIL
   ~DirichletDistribution() = default;
 
   /**
-   * @brief allows to construct a Dirichlet distribution with evidences only, ctor only allows alpha values
+   * @brief allows constructing a Dirichlet distribution with evidences only, ctor only allows alpha values
    *        for this, a neutral prior is assumed
    */
   static constexpr DirichletDistribution from_evidences(WeightType evidences);
@@ -196,6 +210,12 @@ public:
    */
   CUDA_AVAIL
   constexpr DirichletDistribution moment_matching_update(WeightType probabilities) const;
+
+  /** @brief compares to DirichletDistributions by separately comparing evidences and priors
+   *         thus, two different DirDistr. can provide the same alphas but are not equal.
+   */
+  CUDA_AVAIL
+  constexpr bool operator==(const DirichletDistribution&) const;
 
 protected:
   WeightType evidence_;
@@ -365,6 +385,12 @@ constexpr DirichletDistribution<N, FloatT>
 DirichletDistribution<N, FloatT>::moment_matching_update(WeightType probabilities) const
 {
   return DirichletDistribution{ *this }.moment_matching_update_(probabilities);
+}
+
+template <std::size_t N, typename FloatT>
+constexpr bool DirichletDistribution<N, FloatT>::operator==(const DirichletDistribution& other) const
+{
+  return evidence_ == other.evidence_ and prior_ == other.prior_;
 }
 
 }  // namespace subjective_logic

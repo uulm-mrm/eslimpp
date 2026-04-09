@@ -1,6 +1,7 @@
 import numpy as np
 import subjective_logic as sl
 import inspect
+import re
 
 def gen_instance(name: str, *args):
     if len(args) == 1:
@@ -33,3 +34,10 @@ def Opinion(*args):
 
 def OpinionNoBase(*args):
     return gen_instance(inspect.stack()[0][3], *args)
+
+def LongShortTermMemory(short_max_size: int, threshold: float, discount: float, fuse_func):
+    type_match = re.search(r'Opinion(\d+[d,f])',str(fuse_func.__nb_signature__))
+    if type_match is None:
+        raise AttributeError(f'{str(fuse_func)} is not supported by LSTM, did you use Opinion2d? NoBase Opinions are not supported')
+    lstm_name = f'LongShortTermMemory{type_match.group(1)}'
+    return getattr(sl, lstm_name)(short_max_size, threshold, discount, fuse_func)

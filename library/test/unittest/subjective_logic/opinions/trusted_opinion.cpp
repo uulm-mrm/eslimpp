@@ -20,7 +20,7 @@ TYPED_TEST_SUITE(TrustedOpinionTest, TestTypes);
 
 TYPED_TEST(TrustedOpinionTest, ExtracOpinionsAndTrust)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
   std::size_t N = TypeParam::SIZE;
 
   Trust<FloatT> default_trust{ 1.0, 0. };
@@ -34,7 +34,7 @@ TYPED_TEST(TrustedOpinionTest, ExtracOpinionsAndTrust)
     auto ops = default_opinion;
     ops.belief_masses()[idx % N] = 0.5;
     auto trust = default_trust;
-    trust.belief() = 1.0 / N * idx;
+    trust.belief() = 1.0 / static_cast<double>(N * idx);
     trusted_ops.emplace_back(default_trust, default_opinion);
   }
 
@@ -74,7 +74,7 @@ TYPED_TEST(TrustedOpinionTest, ExtracOpinionsAndTrust)
 
 TYPED_TEST(TrustedOpinionTest, Ctor)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
 
   Trust<FloatT> expected_trust{ 1.0, 0. };
   TypeParam expected_opinion;
@@ -91,7 +91,7 @@ TYPED_TEST(TrustedOpinionTest, Ctor)
 
 TYPED_TEST(TrustedOpinionTest, IsValid)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
   Trust<FloatT> trust;
   TypeParam opinion;
 
@@ -107,12 +107,46 @@ TYPED_TEST(TrustedOpinionTest, IsValid)
   EXPECT_FALSE(to3.is_valid());
 }
 
+TYPED_TEST(TrustedOpinionTest, Quantization)
+{
+  using FloatT = typename TypeParam::FLOAT_t;
+
+  Trust<FloatT> trust1{ 1.0, 0. };
+  TypeParam opinion = TypeParam::NeutralBeliefOpinion();
+
+  TrustedOpinion to1{ trust1, opinion };
+
+  FloatT precision = 1.2 / 255;
+  auto to_quant = to1.get_quantized();
+
+  EXPECT_NEAR(to1.trust().belief(), to_quant.trust().belief().as_limit_type(), precision);
+  EXPECT_NEAR(to1.trust().disbelief(), to_quant.trust().disbelief().as_limit_type(), precision);
+
+  for (std::size_t idx{ 0 }; idx < to1.SIZE; idx++)
+  {
+    EXPECT_NEAR(to1.opinion().belief_masses()[idx], to_quant.opinion().belief_masses()[idx].as_limit_type(), precision);
+  }
+
+  auto recovered_op = decltype(to1){ to_quant };
+  EXPECT_NEAR(to1.trust().belief(), recovered_op.trust().belief(), precision);
+  EXPECT_NEAR(to1.trust().disbelief(), recovered_op.trust().disbelief(), precision);
+
+  for (std::size_t idx{ 0 }; idx < to1.SIZE; idx++)
+  {
+    EXPECT_NEAR(to1.opinion().belief_masses()[idx], recovered_op.opinion().belief_masses()[idx], precision);
+  }
+
+  EXPECT_EQ(to1.get_quantized(), decltype(to_quant){ to1 });
+  EXPECT_EQ(to_quant.get_dequantized(), decltype(to1){ to_quant });
+}
+
 TYPED_TEST(TrustedOpinionTest, DiscountedOpinion)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
   using BeliefType = typename Trust<FloatT>::BeliefType;
 
   Trust<FloatT> trust1{ 1.0, 0. };
+
   TypeParam opinion;
   opinion.belief_masses()[0] = 1.;
 
@@ -129,7 +163,7 @@ TYPED_TEST(TrustedOpinionTest, DiscountedOpinion)
 
 TYPED_TEST(TrustedOpinionTest, TrustAccess)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
   //  using BeliefType = typename Trust<FloatT>::BeliefType;
 
   Trust<FloatT> trust{ 0.8, 0.2 };
@@ -151,7 +185,7 @@ TYPED_TEST(TrustedOpinionTest, TrustAccess)
 
 TYPED_TEST(TrustedOpinionTest, OpinionAccess)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
 
   Trust<FloatT> trust{};
   TypeParam opinion{};
@@ -173,7 +207,7 @@ TYPED_TEST(TrustedOpinionTest, OpinionAccess)
 
 TYPED_TEST(TrustedOpinionTest, TrustRevision)
 {
-  using FloatT = TypeParam::FLOAT_t;
+  using FloatT = typename TypeParam::FLOAT_t;
 
   Trust<FloatT> trust_1{ 0.8, 0. };
   Trust<FloatT> trust_2{ 0.5, 0.1 };

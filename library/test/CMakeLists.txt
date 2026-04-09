@@ -10,6 +10,7 @@ else()
     set(UNITTEST_PLAYGROUND_EXECUTABLES "")
 
     add_subdirectory(unittest/subjective_logic)
+    add_subdirectory(standalone)
 
     # append the unittests to the global list of tests
     set(TEST_EXECUTABLES "${TEST_EXECUTABLES};${UNITTEST_EXECUTABLES}" PARENT_SCOPE)
