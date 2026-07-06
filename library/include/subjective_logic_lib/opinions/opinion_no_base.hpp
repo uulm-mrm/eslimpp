@@ -1804,7 +1804,8 @@ void OpinionNoBase<N, FloatT>::to_char_buffer(char* buffer, std::size_t max_leng
     if (offset >= max_length)
       break;  // prevent overflow
   }
-  snprintf(buffer + offset, max_length - offset, "]\0");
+  // todo: snprintf compiles on __device__ but apparently does not work as intended, find other solution
+  snprintf(buffer + offset, max_length - offset, "]");
 }
 
 template <std::size_t N, typename FloatT>

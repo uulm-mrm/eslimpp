@@ -1,6 +1,7 @@
 #include "container_bindings.hpp"
 
 #include "subjective_logic_lib/opinions/opinion.hpp"
+#include "subjective_logic_lib/types/fusion_types.hpp"
 #include "subjective_logic_lib/container/long_short_term_memory.hpp"
 
 #include <nanobind/stl/function.h>
@@ -27,12 +28,17 @@ struct LSTMemoryLoader
     }
 
     auto bound_class = nb::class_<LSTM>(bound_module, module_name.c_str())
-                           .def(nb::init<std::size_t, FloatT, FloatT, typename LSTM::FusionFunc>())
+                           //  .def(nb::init<std::size_t, FloatT, FloatT, typename LSTM::FusionFunc>())
+                           .def(nb::init<std::size_t, FloatT, FloatT, sl::FusionType, bool, bool>())
                            .def("add", &LSTM::add)
                            .def("is_last_conflicted", &LSTM::is_last_conflicted)
                            .def("get_opinion", &LSTM::get_opinion)
                            .def("get_long_opinion", &LSTM::get_long_opinion)
-                           .def("get_short_opinion", &LSTM::get_short_opinion);
+                           .def("get_short_opinion", &LSTM::get_short_opinion)
+                           .def("get_short_size", &LSTM::get_short_size)
+                           .def("get_long_size", &LSTM::get_long_size)
+                           .def("get_conflicted_pair", &LSTM::get_conflicted_pair)
+                           .def("reset", &LSTM::reset);
     //            .def(nb::init<Array>())
     //            .def(nb::init<Array, Array>())
     //            .def_static("from_evidences", &Dirichlet::from_evidences)

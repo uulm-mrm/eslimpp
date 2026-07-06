@@ -41,10 +41,26 @@ struct MultiSourceFusionLoader
   }
 };
 
+template <std::size_t N, typename FloatT>
+struct SequentialFusionLoader
+{
+  static void load(::nanobind::class_<sl::multisource::SequentialFusion>& nb_mod)
+  {
+    using Opinion = sl::Opinion<N, FloatT>;
+
+    nb_mod.def_static("fuse_opinions", &sl::multisource::SequentialFusion::fuse_opinions<Opinion>);
+  }
+};
+
 void loadMultiSourceFusionOperatorBindings(::nanobind::module_& bound_module)
 {
   std::string module_name{ "Fusion" };
   auto bound_class = nb::class_<sl::multisource::Fusion>(bound_module, module_name.c_str());
 
   loadBindings<MultiSourceFusionLoader>(bound_class);
+
+  std::string module_name_sf{ "SequentialFusion" };
+  auto bound_class_sf = nb::class_<sl::multisource::SequentialFusion>(bound_module, module_name_sf.c_str());
+
+  loadBindings<SequentialFusionLoader>(bound_class_sf);
 }

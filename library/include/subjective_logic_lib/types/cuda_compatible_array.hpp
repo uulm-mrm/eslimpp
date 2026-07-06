@@ -375,13 +375,13 @@ constexpr const T& Array<N, T>::back() const
 
 template <std::size_t N, typename T, typename U>
 CUDA_AVAIL Array<N, T> operator+(U value, Array<N, T> array)
-  requires is_addable<U, T>
+  requires is_addable<U, T> and (not std::is_same_v<std::remove_reference_t<U>, Array<N, T>>)
 {
   return array += value;
 }
 template <std::size_t N, typename T, typename U>
 CUDA_AVAIL Array<N, T> operator+(Array<N, T> array, U value)
-  requires is_addable<T, U>
+  requires is_addable<T, U> and (not std::is_same_v<std::remove_reference_t<U>, Array<N, T>>)
 {
   return array += value;
 }
@@ -430,14 +430,14 @@ CUDA_AVAIL Array<N, T> operator/(Array<N, T> array, U value)
 
 template <std::size_t N, typename T>
 template <typename U>
-constexpr Array<N, T> Array<N, T>::operator+(const Array<N, U>& other) const
+CUDA_AVAIL constexpr Array<N, T> Array<N, T>::operator+(const Array<N, U>& other) const
   requires is_addable<T, U>
 {
   return Array(*this).operator+=(other);
 }
 template <std::size_t N, typename T>
 template <typename U>
-constexpr Array<N, T>& Array<N, T>::operator+=(const Array<N, U>& other)
+CUDA_AVAIL constexpr Array<N, T>& Array<N, T>::operator+=(const Array<N, U>& other)
   requires is_addable<T, U>
 {
   constexpr_for<0, N>([this, &other](std::size_t idx) { entries_[idx] += other[idx]; });
@@ -445,7 +445,7 @@ constexpr Array<N, T>& Array<N, T>::operator+=(const Array<N, U>& other)
 }
 template <std::size_t N, typename T>
 template <typename U>
-constexpr Array<N, T>& Array<N, T>::operator+=(const U& value)
+CUDA_AVAIL constexpr Array<N, T>& Array<N, T>::operator+=(const U& value)
   requires is_addable<T, U>
 {
   constexpr_for<0, N>([this, value](std::size_t idx) { entries_[idx] += value; });

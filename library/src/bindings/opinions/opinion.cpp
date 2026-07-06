@@ -84,6 +84,7 @@ struct OpinionLoader
             .def(nb::init())
             .def(nb::init<BeliefType, BeliefType>(), nb::arg("belief_masses"), nb::arg("prior"))
             .def(nb::init<BeliefType>(), nb::arg("belief_masses"))
+            .def(nb::init<sl::DirichletDistribution<N, FloatT>>(), nb::arg("dirichlet"))
             .def(nb::init<const Opinion&>())
             .def(nb::init<Opinion&&>())
             .def("__deepcopy__", [](const Opinion& a, nb::dict memo) -> Opinion { return a; })

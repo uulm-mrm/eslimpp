@@ -1,8 +1,10 @@
 #include "gtest/gtest.h"
 
 #include "subjective_logic_lib/container/long_short_term_memory.hpp"
+#include "subjective_logic_lib/multi_source/fusion_operators.hpp"
 #include "subjective_logic_lib/opinions/opinion_no_base.hpp"
 #include "subjective_logic_lib/opinions/opinion.hpp"
+#include "subjective_logic_lib/types/fusion_types.hpp"
 
 namespace subjective_logic::container
 {
@@ -30,9 +32,9 @@ TYPED_TEST(LSTMemoryTest, Ctor)
   constexpr double threshold{ 0.5 };
   constexpr double discount{ 0.5 };
 
-  LSTMemory memory(5, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
-  LSTMemory memory2(8, threshold, discount, [](TypeParam a, TypeParam b) { return a.bc_fuse(b); });
-  LSTMemory memory3(8, threshold, discount, [](TypeParam a, TypeParam b) { return a.average_fuse(b); });
+  LSTMemory memory(5, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
+  LSTMemory memory2(8, threshold, discount, subjective_logic::FusionType::BELIEF_CONSTRAINT);
+  LSTMemory memory3(8, threshold, discount, subjective_logic::FusionType::AVERAGE);
 }
 
 TYPED_TEST(LSTMemoryTest, FusionSelection)
@@ -42,9 +44,9 @@ TYPED_TEST(LSTMemoryTest, FusionSelection)
   constexpr double threshold{ 0.5 };
   constexpr double discount{ 0.5 };
 
-  LSTMemory memory(5, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
-  LSTMemory memory2(8, threshold, discount, [](TypeParam a, TypeParam b) { return a.bc_fuse(b); });
-  LSTMemory memory3(8, threshold, discount, [](TypeParam a, TypeParam b) { return a.average_fuse(b); });
+  LSTMemory memory(5, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
+  LSTMemory memory2(8, threshold, discount, subjective_logic::FusionType::BELIEF_CONSTRAINT);
+  LSTMemory memory3(8, threshold, discount, subjective_logic::FusionType::AVERAGE);
 
   // test if execution works, not if the fusion result is
   TypeParam default_op{};
@@ -70,7 +72,7 @@ TYPED_TEST(LSTMemoryTest, Add)
   constexpr double discount{ 0.8 };
 
   constexpr std::size_t n_test = 5;
-  LSTMemory memory(n_test, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
+  LSTMemory memory(n_test, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
 
   TypeParam a{};
   a.belief_masses()[0] = 0.5;
@@ -106,7 +108,7 @@ TYPED_TEST(LSTMemoryTest, AddWithReset)
   constexpr double discount{ 0.8 };
 
   constexpr std::size_t n_test = 5;
-  LSTMemory memory(n_test, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
+  LSTMemory memory(n_test, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
 
   TypeParam a{};
   a.belief_masses()[0] = 0.9;
@@ -137,13 +139,13 @@ TYPED_TEST(LSTMemoryTest, AddWithReset)
   // conflict-based reset should be applied by now,
   // this depends on the threshold and opinions and was set such that it is triggered here
   // may change with different values in the future.
-  EXPECT_EQ(memory.size(), memory.get_short_max_size());
+  EXPECT_TRUE(memory.is_last_conflicted());
   // conflict during last "add" leads to different output
   EXPECT_NE(memory.get_opinion(), last_output);
 
-  // pushing another a from the short to the long buffer -> another reset expected
+  // due to internal short-term memory conflict handling, no further resets are expected
   last_output = memory.add(b);
-  EXPECT_EQ(memory.size(), memory.get_short_max_size());
+  EXPECT_FALSE(memory.is_last_conflicted());
 }
 
 TYPED_TEST(LSTMemoryTest, SetShortMaxSize)
@@ -153,7 +155,7 @@ TYPED_TEST(LSTMemoryTest, SetShortMaxSize)
   constexpr double discount{ 0.8 };
 
   constexpr std::size_t n_test = 5;
-  LSTMemory memory(n_test, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
+  LSTMemory memory(n_test, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
 
   TypeParam a{};
   a.belief_masses()[0] = 0.9;
@@ -192,7 +194,7 @@ TYPED_TEST(LSTMemoryTest, Reset)
   constexpr double discount{ 0.8 };
 
   constexpr std::size_t n_test = 5;
-  LSTMemory memory(n_test, threshold, discount, [](TypeParam a, TypeParam b) { return a.cum_fuse(b); });
+  LSTMemory memory(n_test, threshold, discount, subjective_logic::FusionType::CUMULATIVE);
 
   TypeParam a{};
   a.belief_masses()[0] = 0.5;
@@ -220,4 +222,230 @@ TYPED_TEST(LSTMemoryTest, Reset)
   EXPECT_EQ(memory.get_long_opinion(), TypeParam::VacuousBeliefOpinion());
 }
 
+TYPED_TEST(LSTMemoryTest, IdentityAverageFusion)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::AVERAGE);
+
+  TypeParam a{};
+  a.belief_masses()[0] = 0.9;
+
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+  }
+
+  EXPECT_EQ(mem.get_long_opinion(), a);
+}
+
+TYPED_TEST(LSTMemoryTest, IdentityWeightedFusion)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::WEIGHTED);
+
+  TypeParam a{};
+  a.belief_masses()[0] = 0.9;
+
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+  }
+
+  EXPECT_EQ(mem.get_long_opinion(), a);
+}
+
+TYPED_TEST(LSTMemoryTest, VacuousABF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::AVERAGE);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(TypeParam{});
+  }
+  EXPECT_EQ(mem.get_opinion(), TypeParam{});
+}
+
+TYPED_TEST(LSTMemoryTest, VacuousCBF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::CUMULATIVE);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(TypeParam{});
+  }
+  EXPECT_EQ(mem.get_opinion(), TypeParam{});
+}
+
+TYPED_TEST(LSTMemoryTest, VacuousWBF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::WEIGHTED);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(TypeParam{});
+  }
+  EXPECT_EQ(mem.get_opinion(), TypeParam{});
+}
+
+TYPED_TEST(LSTMemoryTest, DogmaticABF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  TypeParam a{};
+  a.belief_masses()[0] = 1.0;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::AVERAGE);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+  }
+  EXPECT_EQ(mem.get_opinion(), a);
+}
+
+TYPED_TEST(LSTMemoryTest, DogmaticCBF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  TypeParam a{};
+  a.belief_masses()[0] = 1.0;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::CUMULATIVE);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+  }
+  EXPECT_EQ(mem.get_opinion(), a);
+}
+
+TYPED_TEST(LSTMemoryTest, DogmaticWBF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  TypeParam a{};
+  a.belief_masses()[0] = 1.0;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::WEIGHTED);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+  }
+  EXPECT_EQ(mem.get_opinion(), a);
+}
+
+TYPED_TEST(LSTMemoryTest, OneDogmaticABF)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.5 };
+  constexpr double discount{ 0.8 };
+  constexpr std::size_t n_st = 1;
+  constexpr std::size_t n_ops = 20;
+
+  TypeParam a{};
+  a.belief_masses()[0] = 1.0;
+
+  TypeParam b{};
+  b.belief_masses()[1] = 0.5;
+
+  LSTMemory mem(n_st, threshold, discount, FusionType::AVERAGE);
+  for (std::size_t idx{ 0 }; idx < n_ops; ++idx)
+  {
+    mem.add(a);
+    mem.add(b);
+  }
+  for (auto bm : mem.get_opinion().belief_masses())
+  {
+    EXPECT_FALSE(std::isnan(bm));
+  }
+}
+
+TYPED_TEST(LSTMemoryTest, ShortTermReset)
+{
+  using LSTMemory = LongShortTermMemory<TypeParam>;
+  constexpr double threshold{ 0.2 };
+  constexpr double discount{ 0.9 };
+  constexpr std::size_t n_st{ 10 };
+  constexpr std::size_t num_ops{ 25 };
+
+  TypeParam op_a{};
+  op_a.belief_masses()[0] = 0.8;
+  TypeParam op_b{};
+  op_b.belief_masses()[1] = 0.8;
+
+  // jump sequence to trigger reset
+  std::vector<TypeParam> ops(2 * num_ops);
+  for (std::size_t idx{ 0 }; idx < num_ops; ++idx)
+  {
+    ops[idx] = op_a;
+    ops[idx + num_ops] = op_b;
+  }
+
+  LSTMemory avg_dc_mem(n_st, threshold, discount, FusionType::AVERAGE, true, true);
+  LSTMemory fusion_mem(n_st, threshold, discount, FusionType::AVERAGE, true, false);
+
+  bool reset_fusion{ false };
+  bool reset_avg_dc{ false };
+
+  auto validate_reset = [](LSTMemory mem, std::size_t idx, bool& reset) {
+    if (!mem.is_last_conflicted())
+    {
+      return;
+    }
+    std::size_t expected_ST_size = idx - num_ops;
+
+    EXPECT_EQ(expected_ST_size, mem.get_short_size());
+    // sanity check reset location
+    EXPECT_TRUE(idx >= num_ops and idx < num_ops + n_st);
+    reset = true;
+  };
+
+  for (std::size_t idx{ 0 }; idx < 2 * num_ops; ++idx)
+  {
+    fusion_mem.add(ops[idx]);
+    avg_dc_mem.add(ops[idx]);
+
+    validate_reset(avg_dc_mem, idx, reset_avg_dc);
+    validate_reset(fusion_mem, idx, reset_fusion);
+  }
+
+  // make sure reset occurred
+  EXPECT_TRUE(reset_avg_dc);
+  EXPECT_TRUE(reset_fusion);
+}
 }  // namespace subjective_logic::container
