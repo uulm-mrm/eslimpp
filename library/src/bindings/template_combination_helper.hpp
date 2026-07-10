@@ -62,9 +62,12 @@ void loadBindings(T& nb_mod)
   loadCombination<loader>(nb_mod, numbers, types);
 }
 
+template <typename T, std::size_t>
+using RepeatType = T;
+
 template <typename T, std::size_t... INDICES>
 auto make_tuple_with_type_and_length(std::index_sequence<INDICES...>)
-    -> std::tuple<decltype((void)INDICES, std::declval<T>())...>;
+    -> std::tuple<RepeatType<T, INDICES>...>;
 
 template <typename T, std::size_t N>
 using TupleWithTypeAnLength = decltype(make_tuple_with_type_and_length<T>(std::make_index_sequence<N>{}));

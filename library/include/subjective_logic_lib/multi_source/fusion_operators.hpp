@@ -11,12 +11,12 @@
 // Kopp and F. Kargl, 2018 21st International Conference on Information Fusion (FUSION), Cambridge, UK, 2018, pp.
 // 1990-1997, doi: 10.23919/ICIF.2018.8455615.
 
-#include <iostream>
 #include <numeric>
 #include <vector>
 #include <optional>
 #include <tuple>
 
+#include "subjective_logic_lib/types/cuda_compatible_array.hpp"
 #include "subjective_logic_lib/util.hpp"
 #include "subjective_logic_lib/types/fusion_types.hpp"
 #include "subjective_logic_lib/types/cuda_compatible_array.hpp"
@@ -127,6 +127,20 @@ protected:
                                                  typename OpinionT::FLOAT_t uncertainty_product)
     requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
 
+  /**
+   * includes all operator-specific calculations and is used together with fuse_opinions
+   * @tparam OpinionT
+   * @param opinions
+   * @param uncertainties
+   * @param uncertainty_product
+   * @return
+   */
+  template <typename OpinionT>
+  static inline OpinionT weighted_fusion_operator(const std::vector<OpinionT>& opinions,
+                                                  std::vector<typename OpinionT::FLOAT_t> uncertainties,
+                                                  typename OpinionT::FLOAT_t uncertainty_product)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+
   // in order to allow cuda available generic lambda functions, the function access must be public
   // necessity might vanish, when not using generic lambdas
   // access for test function may be provided using a Test friend class
@@ -192,6 +206,45 @@ public:
     requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
 };
 
+struct SequentialFusion
+{
+  /**
+   * Apply sequential fusion operator for a (discounted) opinion and and a newly added opinion.
+   * @param fusion_type
+   * @param op_a discounted opinion
+   * @param op_b newly added opinion
+   * @param weight combination weight
+   * @param discount
+   */
+  template <typename OpinionT>
+  static inline std::pair<OpinionT, typename OpinionT::FLOAT_t> fuse_opinions(FusionType fusion_type,
+                                                                              OpinionT op_a,
+                                                                              OpinionT op_b,
+                                                                              OpinionT::FLOAT_t weight,
+                                                                              OpinionT::FLOAT_t discount = 1.0)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+
+  template <typename OpinionT>
+  static inline std::pair<OpinionT, typename OpinionT::FLOAT_t>
+  average_fusion_operator(OpinionT op_a, OpinionT op_b, OpinionT::FLOAT_t weight, OpinionT::FLOAT_t discount)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+
+  template <typename OpinionT>
+  static inline std::pair<OpinionT, typename OpinionT::FLOAT_t>
+  belief_constrained_fusion_operator(OpinionT op_a, OpinionT op_b, OpinionT::FLOAT_t weight, OpinionT::FLOAT_t discount)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+
+  template <typename OpinionT>
+  static inline OpinionT
+  cumulative_fusion_operator(OpinionT op_a, OpinionT op_b, OpinionT::FLOAT_t weight, OpinionT::FLOAT_t discount)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+
+  template <typename OpinionT>
+  static inline std::pair<OpinionT, typename OpinionT::FLOAT_t>
+  weighted_fusion_operator(OpinionT op_a, OpinionT op_b, OpinionT::FLOAT_t weight, OpinionT::FLOAT_t discount)
+    requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>;
+};
+
 template <typename OpinionT>
 inline OpinionT Fusion::fuse_opinions(FusionType fusion_type, std::initializer_list<OpinionT>& inputs)
   requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
@@ -230,6 +283,10 @@ inline OpinionT Fusion::fuse_opinions(FusionType fusion_type, std::vector<Opinio
     case FusionType::AVERAGE:
     {
       return fuse_opinions_<OpinionT>(opinions, &Fusion::average_fusion_operator<OpinionT>);
+    }
+    case FusionType::WEIGHTED:
+    {
+      return fuse_opinions_<OpinionT>(opinions, Fusion::weighted_fusion_operator<OpinionT>);
     }
     default:
     {
@@ -542,4 +599,144 @@ OpinionT Fusion::average_fusion_operator(const std::vector<OpinionT>& opinions,
   return result;
 }
 
+template <typename OpinionT>
+OpinionT Fusion::weighted_fusion_operator(const std::vector<OpinionT>& opinions,
+                                          std::vector<typename OpinionT::FLOAT_t> uncertainties,
+                                          typename OpinionT::FLOAT_t uncertainty_product)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  constexpr std::size_t N = OpinionT::SIZE;
+  using FloatT = typename OpinionT::FLOAT_t;
+
+  auto val =
+      std::accumulate(opinions.begin(), opinions.end(), Array<N, FloatT>{}, [](Array<N, FloatT> total, OpinionT op) {
+        return total + (1 - op.uncertainty()) * op.evidence();
+      });
+  auto denom = std::accumulate(opinions.begin(), opinions.end(), FloatT{ 0.0 }, [](FloatT total, OpinionT op) {
+    return total + (1 - op.uncertainty());
+  });
+
+  if (denom < 1e-9)
+  {
+    return OpinionT{};
+  }
+
+  auto combined_evidence = val / denom;
+  return OpinionT(DirichletDistribution<N, FloatT>().from_evidences(combined_evidence));
+}
+
+template <typename OpinionT>
+inline std::pair<OpinionT, typename OpinionT::FLOAT_t> SequentialFusion::fuse_opinions(FusionType fusion_type,
+                                                                                       OpinionT op_a,
+                                                                                       OpinionT op_b,
+                                                                                       OpinionT::FLOAT_t weight,
+                                                                                       OpinionT::FLOAT_t discount)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  switch (fusion_type)
+  {
+    case subjective_logic::FusionType::AVERAGE:
+      return SequentialFusion::average_fusion_operator(op_a, op_b, weight, discount);
+    case subjective_logic::FusionType::BELIEF_CONSTRAINT:
+      return SequentialFusion::belief_constrained_fusion_operator(op_a, op_b, weight, discount);
+    case subjective_logic::FusionType::CUMULATIVE:
+      return { SequentialFusion::cumulative_fusion_operator(op_a, op_b, weight, discount), weight };
+    case subjective_logic::FusionType::WEIGHTED:
+      return SequentialFusion::weighted_fusion_operator(op_a, op_b, weight, discount);
+      break;
+    default:
+      throw std::logic_error{ "Sequential fusion is not yet implemented for: " +
+                              std::to_string(static_cast<int>(fusion_type)) };
+  }
+}
+
+template <typename OpinionT>
+std::pair<OpinionT, typename OpinionT::FLOAT_t> SequentialFusion::average_fusion_operator(OpinionT op_a,
+                                                                                          OpinionT op_b,
+                                                                                          OpinionT::FLOAT_t weight,
+                                                                                          OpinionT::FLOAT_t discount)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  weight = discount * weight + 1.0;
+
+  bool a_dogmatic = op_a.uncertainty() < 1e-9;
+  bool b_dogmatic = op_b.uncertainty() < 1e-9;
+  if (a_dogmatic && b_dogmatic)
+  {
+    auto belief_masses = (op_a.belief_masses() + op_b.belief_masses()) / 2.0;
+    return { OpinionT(belief_masses), weight };
+  }
+  if (a_dogmatic)
+  {
+    return { op_a, weight };
+  }
+  if (b_dogmatic)
+  {
+    return { op_b, weight };
+  }
+
+  auto evidence_combined = (weight - 1.0) / weight * op_a.evidence() + op_b.evidence() / weight;
+  return { OpinionT(
+               DirichletDistribution<OpinionT::SIZE, typename OpinionT::FLOAT_t>().from_evidences(evidence_combined)),
+           weight };
+}
+
+template <typename OpinionT>
+std::pair<OpinionT, typename OpinionT::FLOAT_t>
+SequentialFusion::belief_constrained_fusion_operator(OpinionT op_a,
+                                                     OpinionT op_b,
+                                                     OpinionT::FLOAT_t weight,
+                                                     OpinionT::FLOAT_t discount)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  throw std::logic_error{ "BCF Sequential operator not implemented." };
+}
+
+template <typename OpinionT>
+OpinionT SequentialFusion::cumulative_fusion_operator(OpinionT op_a,
+                                                      OpinionT op_b,
+                                                      OpinionT::FLOAT_t weight,
+                                                      OpinionT::FLOAT_t discount)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  op_a.trust_discount_(discount);
+  return op_a.cum_fuse(op_b);
+}
+
+template <typename OpinionT>
+std::pair<OpinionT, typename OpinionT::FLOAT_t> SequentialFusion::weighted_fusion_operator(OpinionT op_a,
+                                                                                           OpinionT op_b,
+                                                                                           OpinionT::FLOAT_t weight,
+                                                                                           OpinionT::FLOAT_t discount)
+  requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
+{
+  auto prev_weight = weight;
+  weight = discount * weight + (1 - op_b.uncertainty());
+  // both opinions vacuous
+  if (weight < 1e-9)
+  {
+    return { op_b, weight };
+  }
+
+  bool a_dogmatic = op_a.uncertainty() < 1e-9;
+  bool b_dogmatic = op_b.uncertainty() < 1e-9;
+  if (a_dogmatic && b_dogmatic)
+  {
+    auto belief_masses = (op_a.belief_masses() + op_b.belief_masses()) / 2.0;
+    return { OpinionT(belief_masses), weight };
+  }
+  if (a_dogmatic)
+  {
+    return { op_a, weight };
+  }
+  if (b_dogmatic)
+  {
+    return { op_b, weight };
+  }
+  auto evidence_combined =
+      discount * prev_weight / weight * op_a.evidence() + (1 - op_b.uncertainty()) / weight * op_b.evidence();
+  return { OpinionT(
+               DirichletDistribution<OpinionT::SIZE, typename OpinionT::FLOAT_t>().from_evidences(evidence_combined)),
+           weight };
+}
 }  // namespace subjective_logic::multisource

@@ -456,13 +456,14 @@ template <typename OpinionT>
 typename OpinionT::FLOAT_t Conflict::average_operator(const RelationType relation_type, std::vector<OpinionT> opinions)
   requires is_opinion<OpinionT> or is_opinion_no_base<OpinionT>
 {
+  using FloatT = OpinionT::FLOAT_t;
   std::size_t num_used = opinions.size();
   if (num_used < 2)
   {
-    return 0;
+    return FloatT{ 0 };
   }
 
-  typename OpinionT::FLOAT_t accumulated_conflict = accumulated_operator(relation_type, opinions);
+  FloatT accumulated_conflict = accumulated_operator(relation_type, opinions);
   // integer division intended, since the number of connections must be an integer
   auto num_connections = static_cast<std::size_t>((num_used * (num_used - 1)) / 2);
 
@@ -478,7 +479,11 @@ typename OpinionT::FLOAT_t Conflict::average_operator(const RelationType relatio
   using FloatT = OpinionT::FLOAT_t;
   if constexpr (N < 2)
   {
-    return 0;
+    return FloatT{ 0 };
+  }
+  if (N == 2 and skip >= 0)
+  {
+    return FloatT{ 0 };
   }
 
   FloatT accumulated_conflict = accumulated_operator(relation_type, opinions, skip);

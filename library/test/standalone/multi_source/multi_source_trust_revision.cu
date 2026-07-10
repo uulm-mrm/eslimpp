@@ -9,6 +9,7 @@ using Opinion = sl::Opinion<2,float>;
 using TrustedOpinion = sl::TrustedOpinion<Opinion>;
 constexpr Opinion trust{Opinion::BeliefType{0.,0.},Opinion::BeliefType{1.0,0.0}};
 constexpr std::size_t n_opinions{1 << 20};
+constexpr std::size_t num_fuse_opinions{3};
 // constexpr std::size_t n_opinions{1 << 0};
 
 #define CUDA_CHECK(call) do { cudaError_t err = call; \
@@ -18,22 +19,22 @@ fprintf(stderr, "CUDA Error: %s (%d) ", cudaGetErrorString(err), err); exit(EXIT
 } while (0)
 
 
-__global__ static void run_revision_factors(Opinion* a, Opinion* b, Opinion* c, Opinion* d, sl::Array<4, float>* dest) {
+__global__ static void run_revision_factors(Opinion* a, Opinion* b, Opinion* c, Opinion* d, sl::Array<num_fuse_opinions, float>* dest) {
   std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= n_opinions) {return;}
 
-  sl::Array<4,TrustedOpinion> topins{
+  sl::Array<num_fuse_opinions,TrustedOpinion> topins{
     sl::TrustedOpinion{trust,a[idx]},
     sl::TrustedOpinion{trust,b[idx]},
-    sl::TrustedOpinion{trust,c[idx]},
+    // sl::TrustedOpinion{trust,c[idx]},
     sl::TrustedOpinion{trust,d[idx]}
   };
   // float avg_conflict = 0;
-  dest[idx] = sl::multisource::TrustRevision::revision_factors<4, TrustedOpinion>(sl::RelationType::CONFLICT, sl::TrustRevisionType::SHARES, sl::ConflictType::AVERAGE, topins);
+  dest[idx] = sl::multisource::TrustRevision::revision_factors<num_fuse_opinions, TrustedOpinion>(sl::RelationType::CONFLICT, sl::TrustRevisionType::SHARES, sl::ConflictType::AVERAGE, topins);
 }
 
 void check_run_revsion_factors() {
-  std::cout << "testing revision factors with 4 opinions " << std::to_string(n_opinions) << " times" << std::endl;
+  std::cout << "testing revision factors with " << num_fuse_opinions << " opinions " << std::to_string(n_opinions) << " times" << std::endl;
   std::vector<Opinion> input_a(n_opinions);
   std::vector<Opinion> input_b(n_opinions);
   std::vector<Opinion> input_c(n_opinions);
@@ -54,7 +55,7 @@ void check_run_revsion_factors() {
   }
   // average prior
   Opinion *op_a, *op_b, *op_c, *op_d;
-  using DestType = sl::Array<4,Opinion::FLOAT_t>;
+  using DestType = sl::Array<num_fuse_opinions,Opinion::FLOAT_t>;
   DestType *dest;
   cudaMalloc(&op_a, sizeof(Opinion)*n_opinions);
   cudaMalloc(&op_b, sizeof(Opinion)*n_opinions);
@@ -87,7 +88,7 @@ void check_run_revsion_factors() {
     std::vector<TrustedOpinion>{
       {trust,input_a.front()},
       {trust,input_b.front()},
-      {trust,input_c.front()},
+      // {trust,input_c.front()},
       {trust,input_d.front()},
     }) ;
 

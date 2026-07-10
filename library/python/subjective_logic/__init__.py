@@ -4,6 +4,7 @@ from .instance_generator import DirichletDistribution, OpinionNoBase, Opinion, L
 from .draw_sl_opinions import *
 
 from subjective_logic._subjective_logic_lib_python_api import Fusion
+from subjective_logic._subjective_logic_lib_python_api import SequentialFusion
 from subjective_logic._subjective_logic_lib_python_api import TrustedFusion
 from subjective_logic._subjective_logic_lib_python_api import Conflict
 from subjective_logic._subjective_logic_lib_python_api import TrustRevision

@@ -4,6 +4,7 @@ SET(TEST_NAME subjective_logic_test)
 set(SL_VARIABLE_TEST_FILES
 
         container/long_short_term_memory.cpp
+        container/sequential_fusion.cpp
 
         # single opinion type tests
         types/cuda_compatible_array_test.cpp

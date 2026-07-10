@@ -88,16 +88,68 @@ TYPED_TEST(MultiSourceTrustedFusionTest, CumFuseTwoVariablesVacuous)
   OpinionT cum_fused = TrustedFusion::fuse_opinions(
       FusionType::CUMULATIVE, RelationType::CONFLICT, TrustRevisionType::SHARES, ConflictType::AVERAGE, vec);
 
-  //  std::vector<TrustedFusion::WeightedTypes> weighted_types;
-  //  weighted_types.push_back({TrustRevisionType::CONFLICT_SHARES, ConflictType::AVERAGE,
-  //  .5}); weighted_types.push_back({TrustRevisionType::NORMAL, ConflictType::ACCUMULATE,
-  //  .5});
-  //
-  //  OpinionT cum_fused2 = TrustedFusion::fuse(
-  //      FusionType::CUMULATIVE,
-  //      weighted_types,
-  //      vec
-  //  );
+  EXPECT_FLOAT_EQ(cum_fused.uncertainty(), 1.0);
+}
+
+TYPED_TEST(MultiSourceTrustedFusionTest, CumFuseTwoVariables)
+{
+  using OpinionT = typename TypeParam::OpinionT;
+  using TrustT = typename TypeParam::TrustT;
+  OpinionT opin1{};
+  opin1.belief_mass(0) = 0.4;
+  opin1.belief_mass(1) = 0.2;
+  TrustT trust1{ 0.5, 0.5 };
+  OpinionT opin2{};
+  opin1.belief_mass(0) = 0.3;
+  opin1.belief_mass(1) = 0.5;
+  TrustT trust2{ 0.5, 0.5 };
+  TypeParam var1{ trust1, opin1 };
+  TypeParam var2{ trust2, opin2 };
+
+  std::vector<TypeParam> vec{ var1, var2 };
+  OpinionT cum_fused = TrustedFusion::fuse_opinions(
+      FusionType::CUMULATIVE, RelationType::CONFLICT, TrustRevisionType::SHARES, ConflictType::AVERAGE, vec);
+  // values are within a range, thus, not nan
+  EXPECT_GE(cum_fused.belief_mass(0), 0.01);
+  EXPECT_LE(cum_fused.belief_mass(0), 0.99);
+  EXPECT_GE(cum_fused.belief_mass(1), 0.01);
+  EXPECT_LE(cum_fused.belief_mass(1), 0.99);
+}
+
+TYPED_TEST(MultiSourceTrustedFusionTest, CumFuseTwoVariablesCudaImpl)
+{
+  using OpinionT = typename TypeParam::OpinionT;
+  using TrustT = typename TypeParam::TrustT;
+  using BeliefType = typename TrustT::BeliefType;
+  OpinionT opin1{};
+  opin1.belief_mass(0) = 0.4;
+  opin1.belief_mass(1) = 0.0;
+  TrustT trust1{ BeliefType{ 0.0, 0.0 }, BeliefType{ 1.0, 0.0 } };
+  OpinionT opin2{};
+  opin2.belief_mass(0) = 0.0;
+  opin2.belief_mass(1) = 0.5;
+  TrustT trust2{ BeliefType{ 0.0, 0.0 }, BeliefType{ 1.0, 0.0 } };
+  TypeParam var1{ trust1, opin1 };
+  TypeParam var2{ trust2, opin2 };
+
+  Array<2, TypeParam> vec{ var1, var2 };
+  auto discounted_opins = TypeParam::extractDiscountedOpinions(vec);
+  OpinionT ref_fusion_no_tr = Fusion::fuse_opinions(FusionType::CUMULATIVE, discounted_opins);
+
+  using WeightTypes = multisource::TrustedFusion::WeightedTypes;
+  Array<1, WeightTypes> weights{ WeightTypes{ subjective_logic::RelationType::CONFLICT,
+                                              subjective_logic::TrustRevisionType::SHARES,
+                                              subjective_logic::ConflictType::AVERAGE,
+                                              0.0 } };
+
+  OpinionT cum_fused = TrustedFusion::fuse_opinions(FusionType::CUMULATIVE, weights, vec);
+
+  EXPECT_EQ(cum_fused, ref_fusion_no_tr);
+
+  weights[0].weight = 1.0;
+  OpinionT cum_fused_with_tr = TrustedFusion::fuse_opinions(FusionType::CUMULATIVE, weights, vec);
+
+  EXPECT_NE(cum_fused_with_tr, ref_fusion_no_tr);
 }
 
 }  // namespace subjective_logic::multisource

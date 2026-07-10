@@ -10,6 +10,7 @@ using TrustedOpinion = sl::TrustedOpinion<Opinion>;
 constexpr Opinion trust{Opinion::BeliefType{0.,0.},Opinion::BeliefType{1.0,0.0}};
 constexpr std::size_t n_opinions{1 << 20};
 // constexpr std::size_t n_opinions{1 << 0};
+constexpr std::size_t num_fuse_opinions{3};
 
 constexpr sl::Array<1,sl::multisource::TrustedFusion::WeightedTypes> weights{sl::multisource::TrustedFusion::WeightedTypes{
   sl::RelationType::CONFLICT,
@@ -29,10 +30,10 @@ __global__ static void run_trusted_fusion(Opinion* a, Opinion* b, Opinion* c, Op
   std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= n_opinions) {return;}
 
-  sl::Array<4,TrustedOpinion> topins{
+  sl::Array<num_fuse_opinions,TrustedOpinion> topins{
     sl::TrustedOpinion{trust,a[idx]},
     sl::TrustedOpinion{trust,b[idx]},
-    sl::TrustedOpinion{trust,c[idx]},
+    // sl::TrustedOpinion{trust,c[idx]},
     sl::TrustedOpinion{trust,d[idx]}
   };
 
@@ -40,7 +41,7 @@ __global__ static void run_trusted_fusion(Opinion* a, Opinion* b, Opinion* c, Op
 }
 
 void check_run_trusted_fusion() {
-  std::cout << "testing trusted fusion with 4 opinions " << std::to_string(n_opinions) << " times" << std::endl;
+  std::cout << "testing trusted fusion with " << num_fuse_opinions << " opinions " << std::to_string(n_opinions) << " times" << std::endl;
   std::vector<Opinion> input_a(n_opinions);
   std::vector<Opinion> input_b(n_opinions);
   std::vector<Opinion> input_c(n_opinions);
@@ -94,7 +95,7 @@ void check_run_trusted_fusion() {
     std::vector<TrustedOpinion>{
       {trust,input_a.front()},
       {trust,input_b.front()},
-      {trust,input_c.front()},
+      // {trust,input_c.front()},
       {trust,input_d.front()},
     }) ;
 

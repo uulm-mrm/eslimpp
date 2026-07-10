@@ -1,9 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
+#include <optional>
 #include <vector>
 #include <functional>
 
-#include "subjective_logic_lib/util.hpp"
+#include "subjective_logic_lib/multi_source/conflict_operators.hpp"
+#include "subjective_logic_lib/multi_source/fusion_operators.hpp"
+#include "subjective_logic_lib/types/fusion_types.hpp"
 
 namespace subjective_logic::container
 {
@@ -14,7 +19,12 @@ public:
   using FloatT = typename OpinionT::FLOAT_t;
   using FusionFunc = std::function<OpinionT(OpinionT, OpinionT)>;
 
-  LongShortTermMemory(std::size_t short_max_size, FloatT threshold, FloatT discount, FusionFunc fuse_func);
+  LongShortTermMemory(std::size_t short_max_size,
+                      FloatT threshold,
+                      FloatT discount,
+                      FusionType fusion_type,
+                      bool handle_st_conflict = true,
+                      bool avg_dc_conflict = true);
 
   // there is no point in only resetting the short memory, either long only or both
   void reset();
@@ -49,6 +59,11 @@ public:
   [[nodiscard]] std::size_t get_short_size() const;
 
   /**
+   * @brief get the current size of the long-term memory
+   */
+  [[nodiscard]] std::size_t get_long_size() const;
+
+  /**
    * @brief Adds an opinions to the memory, popped short-term opinions are automatically added to the long-term memory.
    *        This function returns the output prior to any conflict considerations,
    *        i.e.,
@@ -70,11 +85,18 @@ public:
   [[nodiscard]] OpinionT get_long_opinion() const;
   // outputs the short-term opinion only by applying the fusion_func to all short-term opinions
   [[nodiscard]] OpinionT get_short_opinion() const;
+  // outputs last conflicting pair (short_op, long_op)
+  [[nodiscard]] std::optional<std::pair<OpinionT, OpinionT>> get_conflicted_pair() const;
 
 protected:
+  void handle_internal_conflict();
+
   FloatT threshold_;
   FloatT discount_;
   FusionFunc fuse_func_;
+  FusionType fusion_type_;
+  bool handle_st_conflict_;
+  bool use_avg_dc_conflict_handling_;
 
   bool last_conflicted_{ false };
 
@@ -84,16 +106,42 @@ protected:
   std::vector<OpinionT> short_term_memory_;
 
   OpinionT long_opinion_{};
+  std::size_t lt_size_{ 0 };
+  FloatT weight_{ 0.0 };
+
+  std::optional<std::pair<OpinionT, OpinionT>> last_conflicted_pair_{};
 };
 
 template <typename OpinionT>
 LongShortTermMemory<OpinionT>::LongShortTermMemory(std::size_t short_max_size,
                                                    FloatT threshold,
                                                    FloatT discount,
-                                                   FusionFunc fuse_func)
-  : threshold_{ threshold }, discount_{ discount }, fuse_func_(fuse_func), short_max_size_(short_max_size)
+                                                   FusionType fusion_type,
+                                                   bool handle_st_conflict,
+                                                   bool avg_dc_conflict)
+  : threshold_{ threshold }
+  , discount_{ discount }
+  , fusion_type_{ fusion_type }
+  , handle_st_conflict_{ handle_st_conflict }
+  , use_avg_dc_conflict_handling_{ avg_dc_conflict }
+  , short_max_size_(short_max_size)
 {
   short_term_memory_.reserve(short_max_size_);
+  switch (fusion_type_)
+  {
+    case subjective_logic::FusionType::AVERAGE:
+      fuse_func_ = [](OpinionT a, OpinionT b) { return a.average_fuse(b); };
+      break;
+    case subjective_logic::FusionType::BELIEF_CONSTRAINT:
+      fuse_func_ = [](OpinionT a, OpinionT b) { return a.bc_fuse(b); };
+      break;
+    case subjective_logic::FusionType::CUMULATIVE:
+      fuse_func_ = [](OpinionT a, OpinionT b) { return a.cum_fuse(b); };
+      break;
+    case subjective_logic::FusionType::WEIGHTED:
+      fuse_func_ = [](OpinionT a, OpinionT b) { return a.wb_fuse(b); };
+      break;
+  }
 }
 
 template <typename OpinionT>
@@ -109,7 +157,8 @@ void LongShortTermMemory<OpinionT>::reset()
 template <typename OpinionT>
 void LongShortTermMemory<OpinionT>::reset_long_memory()
 {
-  long_opinion_ = OpinionT::VacuousBeliefOpinion();
+  lt_size_ = 0;
+  weight_ = 0.0;
   // current_size_ must be reset, to avoid considering long_opinion in next output
   current_size_ = std::min(current_size_, short_max_size_);
 }
@@ -184,8 +233,15 @@ std::size_t LongShortTermMemory<OpinionT>::get_short_size() const
 }
 
 template <typename OpinionT>
+std::size_t LongShortTermMemory<OpinionT>::get_long_size() const
+{
+  return lt_size_;
+}
+
+template <typename OpinionT>
 OpinionT LongShortTermMemory<OpinionT>::add(const OpinionT& new_opinion)
 {
+  last_conflicted_ = false;
   current_size_++;
   if (short_term_memory_.size() < short_max_size_)
   {
@@ -197,8 +253,33 @@ OpinionT LongShortTermMemory<OpinionT>::add(const OpinionT& new_opinion)
   short_term_memory_[current_short_ring_idx_++] = new_opinion;
   current_short_ring_idx_ %= short_max_size_;
 
-  long_opinion_.trust_discount_(discount_);
-  long_opinion_ = fuse_func_(long_opinion_, hopped_opinion);
+  if (lt_size_ == 0)
+  {
+    long_opinion_ = hopped_opinion;
+    lt_size_++;
+    // weight initialization depends on fusion type
+    switch (fusion_type_)
+    {
+      case subjective_logic::FusionType::AVERAGE:
+        weight_ = 1.0;
+        break;
+      case subjective_logic::FusionType::BELIEF_CONSTRAINT:
+        // TODO(@deuscher) - BCF implementation missing
+        break;
+      case subjective_logic::FusionType::CUMULATIVE:
+        // weight not required for CBF
+        break;
+      case subjective_logic::FusionType::WEIGHTED:
+        weight_ = (1 - long_opinion_.uncertainty());
+        break;
+    }
+  }
+  else
+  {
+    lt_size_++;
+    std::tie(long_opinion_, weight_) =
+        multisource::SequentialFusion::fuse_opinions(fusion_type_, long_opinion_, hopped_opinion, weight_, discount_);
+  }
 
   auto output = get_opinion();
 
@@ -207,12 +288,13 @@ OpinionT LongShortTermMemory<OpinionT>::add(const OpinionT& new_opinion)
 
   if (conflict > threshold_)
   {
+    last_conflicted_pair_ = { get_short_opinion(), get_long_opinion() };
     reset_long_memory();
     last_conflicted_ = true;
-  }
-  else
-  {
-    last_conflicted_ = false;
+    if (handle_st_conflict_)
+    {
+      handle_internal_conflict();
+    }
   }
 
   return output;
@@ -233,6 +315,10 @@ OpinionT LongShortTermMemory<OpinionT>::get_opinion() const
 template <typename OpinionT>
 OpinionT LongShortTermMemory<OpinionT>::get_long_opinion() const
 {
+  if (lt_size_ == 0)
+  {
+    return OpinionT::VacuousBeliefOpinion();
+  }
   return long_opinion_;
 }
 
@@ -243,12 +329,71 @@ OpinionT LongShortTermMemory<OpinionT>::get_short_opinion() const
   {
     return OpinionT::VacuousBeliefOpinion();
   }
-  OpinionT fused_op = short_term_memory_[0];
-  for (std::size_t i = 1; i < short_term_memory_.size(); ++i)
+
+  return subjective_logic::multisource::Fusion::fuse_opinions(fusion_type_, short_term_memory_);
+}
+
+template <typename OpinionT>
+std::optional<std::pair<OpinionT, OpinionT>> LongShortTermMemory<OpinionT>::get_conflicted_pair() const
+{
+  return last_conflicted_pair_;
+}
+
+template <typename OpinionT>
+void LongShortTermMemory<OpinionT>::handle_internal_conflict()
+{
+  using MSF = subjective_logic::multisource::Fusion;
+  using Conflict = subjective_logic::multisource::Conflict;
+
+  std::size_t k_star = short_max_size_;
+  std::vector<OpinionT> linear_buffer(short_max_size_);
+  for (std::size_t idx{ 0 }; idx < short_max_size_; ++idx)
   {
-    fused_op = fuse_func_(fused_op, short_term_memory_[i]);
+    // reverse and linearize ring-buffer
+    std::size_t rb_j = (current_short_ring_idx_ - 1 - idx + short_max_size_) % short_max_size_;
+    linear_buffer[idx] = short_term_memory_[rb_j];
   }
-  return fused_op;
+
+  if (use_avg_dc_conflict_handling_)
+  {
+    FloatT prev_conflict{ 1.0 };
+    std::vector<FloatT> rel_conflicts(short_max_size_, 0.0);
+    for (std::size_t idx{ 2 }; idx < short_max_size_; ++idx)
+    {
+      const std::vector<OpinionT> slice(linear_buffer.begin(), linear_buffer.begin() + idx);
+
+      // compute average conflict
+      FloatT avg_conflict = Conflict::conflict(ConflictType::AVERAGE, slice);
+      rel_conflicts[idx] = avg_conflict / prev_conflict;
+      prev_conflict = avg_conflict;
+    }
+
+    auto it = std::max_element(rel_conflicts.begin(), rel_conflicts.end());
+    std::size_t argmax = std::distance(rel_conflicts.begin(), it);
+    k_star = argmax < 2 ? 0 : argmax - 2;
+  }
+  else
+  {
+    std::vector<FloatT> conflicts{};
+    for (std::size_t idx{ 0 }; idx < short_max_size_ - 1; ++idx)
+    {
+      // split ST memory into old and new and fuse opinions together
+      std::vector<OpinionT> new_ops = { linear_buffer.begin(), linear_buffer.begin() + idx + 1 };
+      std::vector<OpinionT> old_ops = { linear_buffer.begin() + idx + 1, linear_buffer.end() };
+
+      OpinionT new_op = MSF::fuse_opinions(fusion_type_, new_ops);
+      OpinionT old_op = MSF::fuse_opinions(fusion_type_, old_ops);
+
+      // consider conflict between old and new partition
+      conflicts.push_back(new_op.degree_of_conflict(old_op));
+    }
+    // copy over new short memory
+    auto it = std::max_element(conflicts.begin(), conflicts.end());
+    k_star = std::distance(conflicts.begin(), it);
+  }
+
+  short_term_memory_ = { linear_buffer.begin(), linear_buffer.begin() + k_star };
+  current_size_ = short_term_memory_.size();
 }
 
 }  // namespace subjective_logic::container
