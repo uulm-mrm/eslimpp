@@ -142,7 +142,6 @@ LongShortTermMemory<OpinionT>::LongShortTermMemory(std::size_t short_max_size,
       fuse_func_ = [](OpinionT a, OpinionT b) { return a.wb_fuse(b); };
       break;
   }
-  std::cout << "TEF using avg_dc ST handling: " << avg_dc_conflict << std::endl;
 }
 
 template <typename OpinionT>
