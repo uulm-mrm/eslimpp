@@ -5,6 +5,7 @@ Fusion type can be changed manually by uncommenting desired type.
 
 Note: For high noise, some runs do not result in a reset.
 """
+
 import numpy as np
 import subjective_logic as sl
 import tqdm
@@ -18,9 +19,14 @@ def run_simulation(ops: list[sl.Opinion]) -> None:
 
     for idx, op in enumerate(ops):
         # Jump will happen at IDX = 25 (24 still old process, 25 new process)
-        # We know detection of jump, e.g. idx = 29 -> ST = (25, 26, 27, 28)
-        # Thus, we expect the ST size to be idx - 25 (jump location) = 4
-        expected_ST_size = idx - JUMP_LOCATION
+        # We know detection of jump, e.g. idx = 29 -> ST = (25, 26, 27, 28, 29)
+        # Thus, we expect the ST size to be idx - 25 + 1 (jump location) = 5
+        # IMPORTANT: the expected_size changed between review and final submission
+        # the reported percentages of early / late / correct are not affected because
+        # the change was applied to both sides of the evaluation.
+        # However, due to the longer ST window, the number of additional resets increased
+        # but the previous trends still holds.
+        expected_ST_size = idx - JUMP_LOCATION + 1
 
         for name, ltst in ltsts.items():
             ltst.add(op)
@@ -82,7 +88,9 @@ for level, variance in NOISE_LEVELS.items():
 
     for name, res in results.items():
         if sum(res[:3]) != NUM_RUNS:
-            print(f"\tSome runs did not result in a reset - can happen for high noise! Found {sum(res[:3])} valid resets.")
+            print(
+                f"\tSome runs did not result in a reset - can happen for high noise! Found {sum(res[:3])} valid resets."
+            )
         print(
             f"\t{name}: correct: {res[0]} ({res[0] / NUM_RUNS * 100:.2f}%) "
             f"early: {res[1]} ({res[1] / NUM_RUNS * 100:.2f}%) "

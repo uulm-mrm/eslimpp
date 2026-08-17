@@ -427,7 +427,7 @@ TYPED_TEST(LSTMemoryTest, ShortTermReset)
     {
       return;
     }
-    std::size_t expected_ST_size = idx - num_ops;
+    std::size_t expected_ST_size = idx - num_ops + 1;
 
     EXPECT_EQ(expected_ST_size, mem.get_short_size());
     // sanity check reset location

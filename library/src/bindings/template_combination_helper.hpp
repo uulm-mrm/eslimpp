@@ -37,8 +37,7 @@ template <template <std::size_t, typename> typename loader,
           std::size_t number,
           std::size_t... numbers,
           typename... TYPES,
-          template <typename...>
-          typename List>
+          template <typename...> typename List>
 constexpr void loadNumbers(T& nb_mod, const List<TYPES...>& types)
 {
   loadTypes<loader, T, number, TYPES...>(nb_mod);
@@ -66,8 +65,7 @@ template <typename T, std::size_t>
 using RepeatType = T;
 
 template <typename T, std::size_t... INDICES>
-auto make_tuple_with_type_and_length(std::index_sequence<INDICES...>)
-    -> std::tuple<RepeatType<T, INDICES>...>;
+auto make_tuple_with_type_and_length(std::index_sequence<INDICES...>) -> std::tuple<RepeatType<T, INDICES>...>;
 
 template <typename T, std::size_t N>
 using TupleWithTypeAnLength = decltype(make_tuple_with_type_and_length<T>(std::make_index_sequence<N>{}));
