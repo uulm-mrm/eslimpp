@@ -289,12 +289,12 @@ OpinionT LongShortTermMemory<OpinionT>::add(const OpinionT& new_opinion)
   if (conflict > threshold_)
   {
     last_conflicted_pair_ = { get_short_opinion(), get_long_opinion() };
-    reset_long_memory();
     last_conflicted_ = true;
     if (handle_st_conflict_)
     {
       handle_internal_conflict();
     }
+    reset_long_memory();
   }
 
   return output;
@@ -370,7 +370,7 @@ void LongShortTermMemory<OpinionT>::handle_internal_conflict()
 
     auto it = std::max_element(rel_conflicts.begin(), rel_conflicts.end());
     std::size_t argmax = std::distance(rel_conflicts.begin(), it);
-    k_star = argmax < 2 ? 0 : argmax - 2;
+    k_star = argmax < 1 ? 0 : argmax - 1;
   }
   else
   {
@@ -389,11 +389,12 @@ void LongShortTermMemory<OpinionT>::handle_internal_conflict()
     }
     // copy over new short memory
     auto it = std::max_element(conflicts.begin(), conflicts.end());
-    k_star = std::distance(conflicts.begin(), it);
+    k_star = std::distance(conflicts.begin(), it) + 1;
   }
 
-  short_term_memory_ = { linear_buffer.begin(), linear_buffer.begin() + k_star };
+  short_term_memory_.assign(linear_buffer.rend() - k_star, linear_buffer.rend());
   current_size_ = short_term_memory_.size();
+  current_short_ring_idx_ = 0;
 }
 
 }  // namespace subjective_logic::container

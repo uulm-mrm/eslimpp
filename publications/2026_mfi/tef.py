@@ -23,6 +23,30 @@ import os.path as osp
 from util import generate_scenario
 
 
+class EWMA:
+
+    def __init__(self, alpha) -> None:
+        self.alpha = alpha
+        self.value = None
+
+    def __call__(self, value):
+        if isinstance(value, float):
+            if self.value is None:
+                self.value = value
+            else:
+                self.value = self.alpha * value + (1 - self.alpha) * self.value
+        elif isinstance(value, sl.Opinion2d):
+            if self.value is None:
+                self.value = value
+            else:
+                belief = self.alpha * value.belief() + (1 - self.alpha) * self.value.belief()
+                disbelief = self.alpha * value.disbelief() + (1 - self.alpha) * self.value.disbelief()
+                self.value = sl.Opinion2d(belief, disbelief)
+        else:
+            raise NotImplementedError("Currently only float is supported")
+        return self.value
+
+
 @numba.njit(cache=True)
 def dirichlet_multinomial_ll(alphas, evidence) -> float:
     alpha_0 = sum(alphas)
@@ -50,7 +74,7 @@ def monte_carlo_ll(long_op: sl.Opinion, short_op: sl.Opinion, num_simulations: i
         synthetic_counts = rng.multinomial(sum(evidence_st), ps)
         mc_log_likelihoods[idx] = dirichlet_multinomial_ll(alphas_lt, synthetic_counts)
 
-    # count more extreme outcomes 
+    # count more extreme outcomes
     tail_events = np.sum(mc_log_likelihoods <= log_likelihood)
     pval = 1 - tail_events / num_simulations
     mc_sim.append(pval)
@@ -71,6 +95,13 @@ def post_hoc_conflict_detection(memory) -> None:
 
     monte_carlo_ll(long_op, short_op)
     dcs.append(short_op.degree_of_conflict(long_op))
+
+
+def sliding_window(arr: np.ndarray, window_size) -> np.ndarray:
+    moving_sum = np.convolve(arr, np.ones(window_size), mode="full")[: len(arr)]
+    # sliding window only contains single value at start
+    divisors = np.minimum(np.arange(1, len(arr) + 1), window_size)
+    return moving_sum / divisors
 
 
 def plot(segments: list[dict[str, any]]) -> None:
@@ -99,6 +130,8 @@ def plot(segments: list[dict[str, any]]) -> None:
 
     plot_ppu(axes[1], inp, color="tab:blue", label="input")
     plot_ppu(axes[1], buffer, color="tab:orange", label="buffer")
+    plot_ppu(axes[1], ewma_ppu, color="tab:green", label="ewma")
+    axes[1].plot(sliding_window_pp, color="tab:purple", label="window")
     axes[1].vlines(np.argwhere(resets), ymin=0.0, ymax=1.0, linestyles=":", color="tab:red")
 
     axes[1].set_ylim(-0.05, 1.05)
@@ -122,8 +155,8 @@ def plot(segments: list[dict[str, any]]) -> None:
 
 def write_csv(base_path="/tmp") -> None:
     os.makedirs(base_path, exist_ok=True)
-    headers = ["inp-pp", "inp-u", "buffer-pp", "buffer-u", "resets", "dc", "pval"]
-    np_arrs_to_write = [inp, buffer, resets.astype(int), dcs, mc_sim]
+    headers = ["inp-pp", "inp-u", "buffer-pp", "buffer-u", "resets", "dc", "pval", "ewma-pp", "ewma-u", "window-pp"]
+    np_arrs_to_write = [inp, buffer, resets.astype(int), dcs, mc_sim, ewma_ppu]
     cols = []
 
     for arr in np_arrs_to_write:
@@ -154,6 +187,11 @@ def run_simulation(ops: list[sl.Opinion], ltst: sl.LongShortTermMemory) -> None:
         buffer[idx, :] = (op_buffer.getBinomialProjection(), op_buffer.uncertainty())
         resets[idx] = ltst.is_last_conflicted()
         post_hoc_conflict_detection(ltst)
+
+        ewma_op = ewma(op)
+        ewma_ppu[idx, :] = (ewma_op.getBinomialProjection(), ewma_op.uncertainty())
+
+    sliding_window_pp[:] = sliding_window(inp[:, 0], window_size=int(2 / (1 - DISCOUNT) - 1))
 
 
 SEED = 42
@@ -206,10 +244,13 @@ inp = np.zeros((len(ops), 2))
 buffer = np.zeros((len(ops), 2))
 resets = np.zeros(len(ops))
 mc_sim, dcs = [], []
+ewma_ppu = np.zeros((len(ops), 2))
+sliding_window_pp = np.zeros(len(ops))
 
 ltst = sl.LongShortTermMemory2d(
     SHORT_WINDOW_SIZE, THRESHOLD, DISCOUNT, FUSION_TYPE, HANDLE_ST_CONFLICT, AVG_DC_CONFLICT_HANDLING
 )
+ewma = EWMA(1 - DISCOUNT)
 
 run_simulation(ops, ltst)
 plot(segments)
