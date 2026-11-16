@@ -356,21 +356,42 @@ void LongShortTermMemory<OpinionT>::handle_internal_conflict()
 
   if (use_avg_dc_conflict_handling_)
   {
-    FloatT prev_conflict{ 1.0 };
-    std::vector<FloatT> rel_conflicts(short_max_size_, 0.0);
-    for (std::size_t idx{ 2 }; idx < short_max_size_; ++idx)
+    // average DoC for first idx opinions (0 when not enough opinions in set, matches paper now)
+    std::vector<FloatT> avg_conflicts(short_max_size_ + 1, 0.0);
+    for (std::size_t idx{ 2 }; idx <= short_max_size_; ++idx)
     {
       const std::vector<OpinionT> slice(linear_buffer.begin(), linear_buffer.begin() + idx);
-
-      // compute average conflict
-      FloatT avg_conflict = Conflict::conflict(ConflictType::AVERAGE, slice);
-      rel_conflicts[idx] = avg_conflict / prev_conflict;
-      prev_conflict = avg_conflict;
+      avg_conflicts[idx] = Conflict::conflict(ConflictType::AVERAGE, slice);
     }
+    const FloatT max_conflict = *std::max_element(avg_conflicts.begin(), avg_conflicts.end());
 
-    auto it = std::max_element(rel_conflicts.begin(), rel_conflicts.end());
-    std::size_t argmax = std::distance(rel_conflicts.begin(), it);
-    k_star = argmax < 1 ? 0 : argmax - 1;
+    constexpr FloatT MIN_DISTANCE{ 1e-5 };
+    // determine average certainty - scales min expected conflict!
+    FloatT avg_certainty{ 0.0 };
+    for (const auto& op : linear_buffer)
+    {
+      avg_certainty += (FloatT{ 1.0 } - op.uncertainty()) / static_cast<FloatT>(short_max_size_);
+    }
+    // recover projected distance (DoC = PD * (1-u_X^A)(1-u_X^B)) ~ certainty^2
+    const FloatT min_conflict = MIN_DISTANCE * avg_certainty * avg_certainty;
+
+    // keep full ST if not a minimum amount of conflict present in ST
+    if (max_conflict > min_conflict)
+    {
+      const FloatT doc_noise = 1e-3 * max_conflict;
+
+      // find largest relative average conflict between consecutive steps for change-point detection
+      FloatT max_rel_conflict{ 0.0 };
+      for (std::size_t idx{ 3 }; idx <= short_max_size_; ++idx)
+      {
+        const FloatT rel_conflict = avg_conflicts[idx] / std::max(avg_conflicts[idx - 1], doc_noise);
+        if (rel_conflict > max_rel_conflict)
+        {
+          max_rel_conflict = rel_conflict;
+          k_star = idx - 1;
+        }
+      }
+    }
   }
   else
   {
